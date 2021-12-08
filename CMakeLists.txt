@@ -3,6 +3,7 @@ project(ScreenRecorder)
 
 set(CMAKE_CXX_FLAGS "-D__STDC_CONSTANT_MACROS")
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 
 add_executable(ScreenRecorder src/main.cpp src/ScreenRecorder.cpp)
 

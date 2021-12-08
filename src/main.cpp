@@ -7,7 +7,7 @@ int main()
 {
     ScreenRecorder screen_record;
 
-    screen_record.capture(600);
+    screen_record.capture();
 
     return 0;
 }

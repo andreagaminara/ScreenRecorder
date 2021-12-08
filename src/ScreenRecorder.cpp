@@ -15,21 +15,23 @@ ScreenRecorder::ScreenRecorder()
 ScreenRecorder::~ScreenRecorder(){
 }
 
-int ScreenRecorder::capture(int numFrames) {
+int ScreenRecorder::capture() {
 
     avdevice_register_all();
 
     output_filename = "../media/output.mp4";
     if (open_video_media())
         return -1;
-    if (open_audio_media())
-        return -1;
-    if (prepare_video_decoder())
+//    if (open_audio_media())
+//        return -1;
+    if (prepare_video_decoder()) {
         cout << "prepare_video_decoder crash!" << endl;
         return -1;
-    if (prepare_audio_decoder())
-        cout << "prepare_audio_decoder crash!" << endl;
-        return -1;
+    }
+//    if (prepare_audio_decoder()){
+//        cout << "prepare_audio_decoder crash!" << endl;
+//        return -1;
+//    }
 
     avformat_alloc_output_context2(&(out_avfc), NULL, NULL, output_filename);
     if (!out_avfc) {
@@ -40,9 +42,9 @@ int ScreenRecorder::capture(int numFrames) {
     if (prepare_video_encoder()) {
         return -1;
     }
-    if (prepare_audio_encoder()) {
-        return -1;
-    }
+//    if (prepare_audio_encoder()) {
+//        return -1;
+//    }
 
     if (out_avfc->oformat->flags & AVFMT_GLOBALHEADER)
         out_avfc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -62,6 +64,17 @@ int ScreenRecorder::capture(int numFrames) {
     }
 
     //TODO: qui sganciare i threads
+    isRunning = true;
+    video_thread = new thread([this](){
+        this->capture_video();
+    });
+
+ //   audio_thread = new thread([this](){
+ //       this->capture_audio();
+    //   });
+    this_thread::sleep_for(10s);
+    isRunning.exchange(false);
+    video_thread->join();
 
     av_write_trailer(out_avfc);
 
@@ -102,12 +115,11 @@ int ScreenRecorder::capture_video(){
         return -1;
     }
 
-    int i = 0;
 
-    while (av_read_frame(video_decoder->avfc, input_packet) >= 0)
+    while (isRunning)
     {
-        if(i++ == numFrames)
-            break;
+        if(av_read_frame(video_decoder->avfc, input_packet) < 0)
+            cout << "Error reading video frame" << endl;
 
         if (video_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             // TODO: refactor to be generic for audio and video (receiving a function pointer to the differences)
@@ -139,6 +151,8 @@ int ScreenRecorder::capture_video(){
         av_packet_free(&input_packet);
         input_packet = NULL;
     }
+
+    return 0;
 }
 
 int ScreenRecorder::capture_audio() {
@@ -241,6 +255,8 @@ int ScreenRecorder::capture_audio() {
         av_packet_free(&input_packet);
         input_packet = NULL;
     }
+
+    return 0;
 }
 
 int ScreenRecorder::transcode_audio(AVPacket *input_packet, AVFrame *input_frame) {
@@ -313,7 +329,7 @@ int ScreenRecorder::open_video_media() {
         return -1;
     }
 
-    if (avformat_open_input(&video_decoder->avfc, ":0.0+0,0", pAVInputFormat, &options) != 0) {
+    if (avformat_open_input(&video_decoder->avfc, video_decoder->filename, pAVInputFormat, &options) != 0) {
         cout << "failed to open input file " << video_decoder->filename << endl;
         return -1;
     }
@@ -342,7 +358,7 @@ int ScreenRecorder::open_audio_media() {
 
     AVInputFormat *pAVInputFormat = av_find_input_format("pulse");
 
-    if (avformat_open_input(&audio_decoder->avfc, ":0.0+0,0", pAVInputFormat, NULL) != 0) {
+    if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
         cout << "failed to open input file " << audio_decoder->filename << endl;
         return -1;
     }

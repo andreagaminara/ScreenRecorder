@@ -12,6 +12,8 @@
 #include <cstring>
 #include <math.h>
 #include <string.h>
+#include <thread>
+#include <atomic>
 
 #define __STDC_CONSTANT_MACROS
 
@@ -63,13 +65,17 @@ typedef struct StreamingContext {
 
 class ScreenRecorder {
 private:
+    std::atomic_bool isRunning;
+
     StreamingContext *video_decoder;
     StreamingContext *video_encoder;
+    std::thread *video_thread;
 
     StreamingContext *audio_decoder;
     StreamingContext *audio_encoder;
     SwrContext      *audioConverter;
     AVAudioFifo     *audioFifo;
+    std::thread *audio_thread;
 
     AVFormatContext *out_avfc;
 
@@ -79,7 +85,7 @@ public:
     ScreenRecorder();
     ~ScreenRecorder();
 
-    int capture(int numFrames);
+    int capture();
     int capture_video();
     int capture_audio();
     int transcode_audio(AVPacket *input_packet, AVFrame *input_frame);
