@@ -151,7 +151,14 @@ int ScreenRecorder::open_media() {
 
     AVInputFormat *pAVInputFormat = av_find_input_format("x11grab");
 
-    if (avformat_open_input(&decoder->avfc, ":0.0+0,0", pAVInputFormat, NULL) != 0) {
+    AVDictionary *options = NULL;
+    int value = av_dict_set(&options, "video_size", "1920x960", 0);
+    if (value < 0) {
+        cout << "no option" << endl;
+        return -1;
+    }
+
+    if (avformat_open_input(&decoder->avfc, ":0.0+0,0", pAVInputFormat, &options) != 0) {
         cout << "failed to open input file " << decoder->filename << endl;
         return -1;
     }
@@ -181,6 +188,7 @@ int ScreenRecorder::prepare_decoder() {
                 cout << "failed to alloc memory for codec context" << endl;
                 return -1;
             }
+
 
             if (avcodec_parameters_to_context(decoder->video_avcc, decoder->video_avs->codecpar) < 0) {
                 cout << "failed to fill codec context" << endl;
@@ -233,6 +241,7 @@ int ScreenRecorder::prepare_video_encoder() {
 
     av_opt_set(encoder->video_avcc->priv_data, "preset", "slow", 0);
 
+    //avcodec_parameters_from_context(encoder->video_avs->codecpar, encoder->video_avcc);
     encoder->video_avcc->height = decoder->video_avcc->height;
     encoder->video_avcc->width = decoder->video_avcc->width;
     encoder->video_avcc->sample_aspect_ratio = decoder->video_avcc->sample_aspect_ratio;
@@ -248,7 +257,7 @@ int ScreenRecorder::prepare_video_encoder() {
 
     //encoder->video_avcc->time_base = av_inv_q(input_framerate);
     encoder->video_avcc->time_base.num = 1;
-    encoder->video_avcc->time_base.den = 30;
+    encoder->video_avcc->time_base.den = 15;
 
     encoder->video_avs->time_base = encoder->video_avcc->time_base;
 
