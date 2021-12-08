@@ -22,16 +22,16 @@ int ScreenRecorder::capture() {
     output_filename = "../media/output.mp4";
     if (open_video_media())
         return -1;
-//    if (open_audio_media())
-//        return -1;
+    if (open_audio_media())
+        return -1;
     if (prepare_video_decoder()) {
         cout << "prepare_video_decoder crash!" << endl;
         return -1;
     }
-//    if (prepare_audio_decoder()){
-//        cout << "prepare_audio_decoder crash!" << endl;
-//        return -1;
-//    }
+    if (prepare_audio_decoder()){
+        cout << "prepare_audio_decoder crash!" << endl;
+        return -1;
+    }
 
     avformat_alloc_output_context2(&(out_avfc), NULL, NULL, output_filename);
     if (!out_avfc) {
@@ -42,9 +42,9 @@ int ScreenRecorder::capture() {
     if (prepare_video_encoder()) {
         return -1;
     }
-//    if (prepare_audio_encoder()) {
-//        return -1;
-//    }
+    if (prepare_audio_encoder()) {
+        return -1;
+    }
 
     if (out_avfc->oformat->flags & AVFMT_GLOBALHEADER)
         out_avfc->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -69,12 +69,13 @@ int ScreenRecorder::capture() {
         this->capture_video();
     });
 
- //   audio_thread = new thread([this](){
- //       this->capture_audio();
-    //   });
+   audio_thread = new thread([this](){
+       this->capture_audio();
+   });
     this_thread::sleep_for(10s);
     isRunning.exchange(false);
     video_thread->join();
+    audio_thread->join();
 
     av_write_trailer(out_avfc);
 
@@ -157,6 +158,20 @@ int ScreenRecorder::capture_video(){
 
 int ScreenRecorder::capture_audio() {
     int numFrames = 100;
+    audioConverter = swr_alloc_set_opts(nullptr,
+                                        av_get_default_channel_layout(audio_decoder->avcc->channels),
+                                        AV_SAMPLE_FMT_FLTP,
+                                        audio_decoder->avcc->sample_rate,
+                                        av_get_default_channel_layout(audio_decoder->avcc->channels),
+                                        (AVSampleFormat)audio_decoder->avs->codecpar->format,
+                                        audio_decoder->avs->codecpar->sample_rate,
+                                        0, nullptr);
+    swr_init(audioConverter);
+
+    // 2 seconds FIFO buffer
+    audioFifo = av_audio_fifo_alloc(AV_SAMPLE_FMT_FLTP, audio_decoder->avcc->channels,
+                                    audio_decoder->avcc->sample_rate * 2);
+    
     AVFrame *input_frame = av_frame_alloc();
     if (!input_frame) {
         cout << "failed to allocated memory for AVFrame" << endl;
@@ -177,18 +192,12 @@ int ScreenRecorder::capture_audio() {
 
     int i = 0;
 
-    while (av_read_frame(audio_decoder->avfc, input_packet) >= 0)
+    while (isRunning)
     {
-        if(i == numFrames)
-            break;
-
-        /*if (audio_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            // TODO: refactor to be generic for audio and video (receiving a function pointer to the differences)
-            if (transcode_video(input_packet, input_frame))
-                return -1;
-            av_packet_unref(input_packet);
-
-        }*/
+        if(av_read_frame(audio_decoder->avfc, input_packet) < 0){
+            cout << "Error reading audio frame" << endl;
+            return -1;
+        }
 
         if (audio_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)  {
 
@@ -236,7 +245,7 @@ int ScreenRecorder::capture_audio() {
 
                 i++;
 
-                ret = av_write_frame(audio_encoder->avfc, outputPacket);
+                ret = av_write_frame(out_avfc, outputPacket);
                 av_packet_unref(outputPacket);
 
             }
@@ -492,7 +501,7 @@ int ScreenRecorder::prepare_video_encoder() {
 }
 
 int ScreenRecorder::prepare_audio_encoder(){
-    audio_encoder->avs = avformat_new_stream(audio_encoder->avfc, NULL);
+    audio_encoder->avs = avformat_new_stream(out_avfc, NULL);
 
     audio_encoder->avc = avcodec_find_encoder(AV_CODEC_ID_AAC);
     if (!audio_encoder->avc) {
