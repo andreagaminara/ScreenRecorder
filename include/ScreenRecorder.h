@@ -43,39 +43,52 @@ extern "C"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/file.h"
+#include "libavutil/audio_fifo.h"
 
 // lib swresample
 
 #include "libswscale/swscale.h"
+#include "libswresample/swresample.h"
 
 }
 
 typedef struct StreamingContext {
     AVFormatContext *avfc;
-    AVCodec *video_avc;
-    //AVCodec *audio_avc;
-    AVStream *video_avs;
-    //AVStream *audio_avs;
-    AVCodecContext *video_avcc;
-    //AVCodecContext *audio_avcc;
-    int video_index;
-    //int audio_index;
+    AVCodec *avc;
+    AVStream *avs;
+    AVCodecContext *avcc;
+    int stream_index;
     char *filename;
 } StreamingContext;
 
 class ScreenRecorder {
 private:
-    StreamingContext *decoder;
-    StreamingContext *encoder;
+    StreamingContext *video_decoder;
+    StreamingContext *video_encoder;
+
+    StreamingContext *audio_decoder;
+    StreamingContext *audio_encoder;
+    SwrContext      *audioConverter;
+    AVAudioFifo     *audioFifo;
+
+    AVFormatContext *out_avfc;
+
+    char *output_filename;
 
 public:
     ScreenRecorder();
     ~ScreenRecorder();
 
     int capture(int numFrames);
-    int open_media();
-    int prepare_decoder();
+    int capture_video();
+    int capture_audio();
+    int transcode_audio(AVPacket *input_packet, AVFrame *input_frame);
+    int open_video_media();
+    int open_audio_media();
+    int prepare_video_decoder();
+    int prepare_audio_decoder();
     int prepare_video_encoder();
+    int prepare_audio_encoder();
     int encode_video(AVFrame *input_frame);
     int transcode_video(AVPacket *input_packet, AVFrame *input_frame);
 };
