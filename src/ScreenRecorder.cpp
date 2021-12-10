@@ -29,14 +29,21 @@ int ScreenRecorder::capture() {
     strcpy(audio_input_format, "pulse");
 
 
-    if (open_video_media())
+    if (open_video_media()){
+        cout << "open_video_media crash!" << endl;
         return -1;
-    if (open_audio_media())
+    }
+
+    if (open_audio_media()){
+        cout << "open_audio_media crash!" << endl;
         return -1;
+    }
+
     if (prepare_video_decoder()) {
         cout << "prepare_video_decoder crash!" << endl;
         return -1;
     }
+
     if (prepare_audio_decoder()){
         cout << "prepare_audio_decoder crash!" << endl;
         return -1;
@@ -49,9 +56,11 @@ int ScreenRecorder::capture() {
     }
 
     if (prepare_video_encoder()) {
+        cout << "prepare_video_encoder crash!" << endl;
         return -1;
     }
     if (prepare_audio_encoder()) {
+        cout << "prepare_audio_encoder crash!" << endl;
         return -1;
     }
 
@@ -348,7 +357,7 @@ int ScreenRecorder::open_video_media() {
     AVInputFormat *pAVInputFormat = av_find_input_format(video_input_format);
 
     AVDictionary *options = NULL;
-    int value = av_dict_set(&options, "video_size", "1920x960", 0);
+    int value = av_dict_set(&options, "video_size", "1920x950", 0);
     if (value < 0) {
         cout << "no option" << endl;
         return -1;
