@@ -67,17 +67,20 @@ class ScreenRecorder {
 private:
     std::atomic_bool isRunning;
 
+    char *video_input_format;
+    char *audio_input_format;
+
     StreamingContext *video_decoder;
     StreamingContext *video_encoder;
-    std::thread *video_thread;
+    std::thread      *video_thread;
 
     StreamingContext *audio_decoder;
     StreamingContext *audio_encoder;
-    SwrContext      *audioConverter;
-    AVAudioFifo     *audioFifo;
-    std::thread *audio_thread;
+    SwrContext       *audioConverter;
+    AVAudioFifo      *audioFifo;
+    std::thread      *audio_thread;
 
-    AVFormatContext *out_avfc;
+    AVFormatContext  *out_avfc;
 
     char *output_filename;
 
@@ -95,8 +98,8 @@ public:
     int prepare_audio_decoder();
     int prepare_video_encoder();
     int prepare_audio_encoder();
-    int encode_video(AVFrame *input_frame);
-    int transcode_video(AVPacket *input_packet, AVFrame *input_frame);
+    int encode_video(AVFrame *input_frame, int i);
+    int transcode_video(AVPacket *input_packet, AVFrame *input_frame, int i);
 };
 
 

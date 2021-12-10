@@ -19,7 +19,16 @@ int ScreenRecorder::capture() {
 
     avdevice_register_all();
 
-    output_filename = "../media/output.mp4";
+    output_filename = (char *)malloc(50*sizeof(char));
+    strcpy(output_filename, "../media/output.mp4");
+
+    video_input_format = (char *)malloc(50*sizeof(char));
+    strcpy(video_input_format, "x11grab");
+
+    audio_input_format = (char *)malloc(50*sizeof(char));
+    strcpy(audio_input_format, "pulse");
+
+
     if (open_video_media())
         return -1;
     if (open_audio_media())
@@ -85,19 +94,26 @@ int ScreenRecorder::capture() {
     }
 
     avformat_close_input(&video_decoder->avfc);
+    avformat_free_context(video_decoder->avfc);
+    video_decoder->avfc = NULL;
 
-    avformat_free_context(video_decoder->avfc); video_decoder->avfc = NULL;
-    avformat_free_context(out_avfc); out_avfc = NULL;
+    avformat_close_input(&audio_decoder->avfc);
+    avformat_free_context(audio_decoder->avfc);
+    audio_decoder->avfc = NULL;
+
+    avformat_free_context(out_avfc);
+    out_avfc = NULL;
 
     avcodec_free_context(&video_decoder->avcc);
     video_decoder->avcc = NULL;
-    //avcodec_free_context(&video_decoder->audio_avcc);
-    //video_decoder->audio_avcc = NULL;
+    avcodec_free_context(&audio_decoder->avcc);
+    audio_decoder->avcc = NULL;
 
     free(video_decoder);
     video_decoder = NULL;
     free(video_encoder);
     video_encoder = NULL;
+
     return 0;
 
 }
@@ -116,6 +132,7 @@ int ScreenRecorder::capture_video(){
         return -1;
     }
 
+    int i=0;
 
     while (isRunning)
     {
@@ -124,24 +141,20 @@ int ScreenRecorder::capture_video(){
 
         if (video_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             // TODO: refactor to be generic for audio and video (receiving a function pointer to the differences)
-            if (transcode_video(input_packet, input_frame))
+            if (transcode_video(input_packet, input_frame, i))
                 return -1;
             av_packet_unref(input_packet);
 
         }
-            /*
-            else if (video_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)  {
-
-                if (transcode_audio(video_decoder, video_encoder, input_packet, input_frame)) return -1;
-                av_packet_unref(input_packet);
-            }*/
         else {
             cout << "ignoring all non video or audio packets" << endl;
         }
+
+        i++;
     }
     // TODO: should I also flush the audio video_encoder?
-    if (encode_video(NULL))
-        return -1;
+    //if (encode_video(NULL))
+      //  return -1;
 
     if (input_frame != NULL) {
         av_frame_free(&input_frame);
@@ -223,7 +236,8 @@ int ScreenRecorder::capture_audio() {
                     cout << "errore" << endl;
                 }
 
-                outputFrame->pts = i * audio_encoder->avs->time_base.den * 1024 / audio_encoder->avcc->sample_rate;
+                //outputFrame->pts = i * audio_encoder->avs->time_base.den * 1024 / audio_encoder->avcc->sample_rate;
+                outputFrame->pts = i * 1024;
 
                 ret = avcodec_send_frame(audio_encoder->avcc, outputFrame);
                 if (ret < 0) {
@@ -241,7 +255,8 @@ int ScreenRecorder::capture_audio() {
 
                 outputPacket->stream_index = audio_encoder->avs->index;
                 outputPacket->duration = audio_encoder->avs->time_base.den * 1024 / audio_encoder->avcc->sample_rate;
-                outputPacket->dts = outputPacket->pts = i * audio_encoder->avs->time_base.den * 1024 / audio_encoder->avcc->sample_rate;
+                //outputPacket->dts = outputPacket->pts = i * audio_encoder->avs->time_base.den * 1024 / audio_encoder->avcc->sample_rate;
+                outputPacket->dts = outputPacket->pts = i * 1024;
 
                 i++;
 
@@ -318,7 +333,8 @@ int ScreenRecorder::open_video_media() {
 
 
     video_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
-    video_decoder->filename = ":0.0+0,0";
+    video_decoder->filename = (char *) malloc(50*sizeof(char));
+    strcpy(video_decoder->filename, ":0.0+0,0");
 
     video_encoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
 
@@ -329,7 +345,7 @@ int ScreenRecorder::open_video_media() {
         return -1;
     }
 
-    AVInputFormat *pAVInputFormat = av_find_input_format("x11grab");
+    AVInputFormat *pAVInputFormat = av_find_input_format(video_input_format);
 
     AVDictionary *options = NULL;
     int value = av_dict_set(&options, "video_size", "1920x960", 0);
@@ -354,7 +370,8 @@ int ScreenRecorder::open_video_media() {
 int ScreenRecorder::open_audio_media() {
 
     audio_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
-    audio_decoder->filename = "default";
+    audio_decoder->filename = (char *) malloc(50*sizeof(char));
+    strcpy(audio_decoder->filename, "default");
 
     audio_encoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
 
@@ -365,7 +382,7 @@ int ScreenRecorder::open_audio_media() {
         return -1;
     }
 
-    AVInputFormat *pAVInputFormat = av_find_input_format("pulse");
+    AVInputFormat *pAVInputFormat = av_find_input_format(audio_input_format);
 
     if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
         cout << "failed to open input file " << audio_decoder->filename << endl;
@@ -538,7 +555,7 @@ int ScreenRecorder::prepare_audio_encoder(){
     return 0;
 }
 
-int ScreenRecorder::encode_video(AVFrame *input_frame) {
+int ScreenRecorder::encode_video(AVFrame *input_frame, int i) {
     if (input_frame)
         input_frame->pict_type = AV_PICTURE_TYPE_NONE;
 
@@ -562,8 +579,9 @@ int ScreenRecorder::encode_video(AVFrame *input_frame) {
 
         output_packet->stream_index = video_decoder->stream_index;
         output_packet->duration = video_encoder->avs->time_base.den / video_encoder->avs->time_base.num / video_decoder->avs->avg_frame_rate.num * video_decoder->avs->avg_frame_rate.den;
+        output_packet->dts = output_packet->pts = i * 1024;
+        //av_packet_rescale_ts(output_packet, video_decoder->avs->time_base, video_encoder->avs->time_base);
 
-        av_packet_rescale_ts(output_packet, video_decoder->avs->time_base, video_encoder->avs->time_base);
         response = av_interleaved_write_frame(out_avfc, output_packet);
         if (response != 0) {
             cout << "Error "<< response <<" while receiving packet from video_decoder" << endl;
@@ -575,7 +593,7 @@ int ScreenRecorder::encode_video(AVFrame *input_frame) {
     return 0;
 }
 
-int ScreenRecorder::transcode_video(AVPacket *input_packet, AVFrame *input_frame) {
+int ScreenRecorder::transcode_video(AVPacket *input_packet, AVFrame *input_frame, int i) {
     int response = avcodec_send_packet(video_decoder->avcc, input_packet);
     if (response < 0) {
         cout << "Error while sending packet to video_decoder" << endl;
@@ -617,7 +635,7 @@ int ScreenRecorder::transcode_video(AVPacket *input_packet, AVFrame *input_frame
         output_frame->pts = input_frame->pts;
 
         if (response >= 0) {
-            if (encode_video(output_frame)) return -1;
+            if (encode_video(output_frame, i)) return -1;
         }
         av_frame_unref(input_frame);
     }
