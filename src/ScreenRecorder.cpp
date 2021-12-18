@@ -26,7 +26,7 @@ int ScreenRecorder::capture() {
     strcpy(video_input_format, "x11grab");
 
     audio_input_format = (char *)malloc(50*sizeof(char));
-    strcpy(audio_input_format, "pulse");
+    strcpy(audio_input_format, "alsa");
 
 
     if (open_video_media()){
@@ -90,7 +90,7 @@ int ScreenRecorder::capture() {
    audio_thread = new thread([this](){
        this->capture_audio();
    });
-    this_thread::sleep_for(10s);
+    this_thread::sleep_for(20s);
     isRunning.exchange(false);
     video_thread->join();
     audio_thread->join();
@@ -380,7 +380,7 @@ int ScreenRecorder::open_audio_media() {
 
     audio_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
     audio_decoder->filename = (char *) malloc(50*sizeof(char));
-    strcpy(audio_decoder->filename, "default");
+    strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
 
     audio_encoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
 
