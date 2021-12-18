@@ -14,6 +14,8 @@
 #include <string.h>
 #include <thread>
 #include <atomic>
+#include <mutex>
+#include <condition_variable>
 
 #define __STDC_CONSTANT_MACROS
 
@@ -66,6 +68,9 @@ typedef struct StreamingContext {
 class ScreenRecorder {
 private:
     std::atomic_bool isRunning;
+    std::atomic_bool isPause;
+    std::mutex m;
+    std::condition_variable cv;
 
     char *video_input_format;
     char *audio_input_format;

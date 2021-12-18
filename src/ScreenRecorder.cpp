@@ -16,21 +16,24 @@ ScreenRecorder::~ScreenRecorder(){
 }
 
 int ScreenRecorder::start(){
+
     isRunning = true;
+    isPause = false;
     video_thread = new thread([this](){
         this->capture_video();
     });
 
-    audio_thread = new thread([this](){
+/*    audio_thread = new thread([this](){
         this->capture_audio();
-    });
+    });*/
     return 0;
 }
 
 int ScreenRecorder::stop(){
     isRunning.exchange(false);
+    cv.notify_all();
     video_thread->join();
-    audio_thread->join();
+    //audio_thread->join();
 
     av_write_trailer(out_avfc);
 
@@ -59,10 +62,15 @@ int ScreenRecorder::stop(){
 }
 
 int ScreenRecorder::pause(){
+    isPause.exchange(true);
+    return 0;
 
 }
 
 int ScreenRecorder::resume(){
+    isPause.exchange(false);
+    cv.notify_all();
+    return 0;
 
 }
 
@@ -140,7 +148,14 @@ int ScreenRecorder::capture() {
     }
 
     start();
-    this_thread::sleep_for(20s);
+    this_thread::sleep_for(10s);
+    pause();
+    cout << "pause" << endl;
+    this_thread::sleep_for(10s);
+    cout << "resume" << endl;
+    cout << "resume" << endl;
+    resume();
+    this_thread::sleep_for(10s);
     stop();
 
 /*    if (muxer_opts != NULL) {
@@ -153,6 +168,7 @@ int ScreenRecorder::capture() {
 }
 
 int ScreenRecorder::capture_video(){
+    unique_lock<mutex> ul(m);
     int numFrames = 100;
     AVFrame *input_frame = av_frame_alloc();
     if (!input_frame) {
@@ -185,6 +201,10 @@ int ScreenRecorder::capture_video(){
         }
 
         i++;
+
+        if (isPause){
+            cv.wait(ul, [this](){return !isPause || !isRunning;});
+        }
     }
     // TODO: should I also flush the audio video_encoder?
     //if (encode_video(NULL))
@@ -204,6 +224,7 @@ int ScreenRecorder::capture_video(){
 }
 
 int ScreenRecorder::capture_audio() {
+    unique_lock<mutex> ul(m);
     int numFrames = 100;
     audioConverter = swr_alloc_set_opts(nullptr,
                                         av_get_default_channel_layout(audio_decoder->avcc->channels),
@@ -387,7 +408,7 @@ int ScreenRecorder::open_video_media() {
     AVInputFormat *pAVInputFormat = av_find_input_format(video_input_format);
 
     AVDictionary *options = NULL;
-    int value = av_dict_set(&options, "video_size", "1920x950", 0);
+    int value = av_dict_set(&options, "video_size", "1920x960", 0);
     if (value < 0) {
         cout << "no option" << endl;
         return -1;
