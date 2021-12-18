@@ -88,6 +88,10 @@ public:
     ScreenRecorder();
     ~ScreenRecorder();
 
+    int start();
+    int stop();
+    int pause();
+    int resume();
     int capture();
     int capture_video();
     int capture_audio();

@@ -15,18 +15,76 @@ ScreenRecorder::ScreenRecorder()
 ScreenRecorder::~ScreenRecorder(){
 }
 
+int ScreenRecorder::start(){
+    isRunning = true;
+    video_thread = new thread([this](){
+        this->capture_video();
+    });
+
+    audio_thread = new thread([this](){
+        this->capture_audio();
+    });
+    return 0;
+}
+
+int ScreenRecorder::stop(){
+    isRunning.exchange(false);
+    video_thread->join();
+    audio_thread->join();
+
+    av_write_trailer(out_avfc);
+
+    avformat_close_input(&video_decoder->avfc);
+    avformat_free_context(video_decoder->avfc);
+    video_decoder->avfc = NULL;
+
+    avformat_close_input(&audio_decoder->avfc);
+    avformat_free_context(audio_decoder->avfc);
+    audio_decoder->avfc = NULL;
+
+    avformat_free_context(out_avfc);
+    out_avfc = NULL;
+
+    avcodec_free_context(&video_decoder->avcc);
+    video_decoder->avcc = NULL;
+    avcodec_free_context(&audio_decoder->avcc);
+    audio_decoder->avcc = NULL;
+
+    free(video_decoder);
+    video_decoder = NULL;
+    free(video_encoder);
+    video_encoder = NULL;
+
+    return 0;
+}
+
+int ScreenRecorder::pause(){
+
+}
+
+int ScreenRecorder::resume(){
+
+}
+
 int ScreenRecorder::capture() {
 
     avdevice_register_all();
 
     output_filename = (char *)malloc(50*sizeof(char));
-    strcpy(output_filename, "../media/output.mp4");
+    strcpy(output_filename, "output.mp4");
+
 
     video_input_format = (char *)malloc(50*sizeof(char));
-    strcpy(video_input_format, "x11grab");
 
     audio_input_format = (char *)malloc(50*sizeof(char));
+
+#ifdef _WIN32
+    strcpy(video_input_format, "gdigrab");
+    strcpy(audio_input_format, "dshow");
+#elif __linux__
+    strcpy(video_input_format, "x11grab");
     strcpy(audio_input_format, "alsa");
+#endif
 
 
     if (open_video_media()){
@@ -74,54 +132,21 @@ int ScreenRecorder::capture() {
         }
     }
 
-    AVDictionary* muxer_opts = NULL;
+    //AVDictionary* muxer_opts = NULL;
 
-    if (avformat_write_header(out_avfc, &muxer_opts) < 0) {
+    if (avformat_write_header(out_avfc, NULL) < 0) {
         cout << "an error occurred when opening output file" << endl;
         return -1;
     }
 
-    //TODO: qui sganciare i threads
-    isRunning = true;
-    video_thread = new thread([this](){
-        this->capture_video();
-    });
-
-   audio_thread = new thread([this](){
-       this->capture_audio();
-   });
+    start();
     this_thread::sleep_for(20s);
-    isRunning.exchange(false);
-    video_thread->join();
-    audio_thread->join();
+    stop();
 
-    av_write_trailer(out_avfc);
-
-    if (muxer_opts != NULL) {
+/*    if (muxer_opts != NULL) {
         av_dict_free(&muxer_opts);
         muxer_opts = NULL;
-    }
-
-    avformat_close_input(&video_decoder->avfc);
-    avformat_free_context(video_decoder->avfc);
-    video_decoder->avfc = NULL;
-
-    avformat_close_input(&audio_decoder->avfc);
-    avformat_free_context(audio_decoder->avfc);
-    audio_decoder->avfc = NULL;
-
-    avformat_free_context(out_avfc);
-    out_avfc = NULL;
-
-    avcodec_free_context(&video_decoder->avcc);
-    video_decoder->avcc = NULL;
-    avcodec_free_context(&audio_decoder->avcc);
-    audio_decoder->avcc = NULL;
-
-    free(video_decoder);
-    video_decoder = NULL;
-    free(video_encoder);
-    video_encoder = NULL;
+    }*/
 
     return 0;
 
@@ -343,7 +368,12 @@ int ScreenRecorder::open_video_media() {
 
     video_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
     video_decoder->filename = (char *) malloc(50*sizeof(char));
+#ifdef _WIN32
+    strcpy(video_decoder->filename, "desktop");
+#elif __linux__
     strcpy(video_decoder->filename, ":0.0+0,0");
+#endif
+
 
     video_encoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
 
@@ -380,7 +410,19 @@ int ScreenRecorder::open_audio_media() {
 
     audio_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
     audio_decoder->filename = (char *) malloc(50*sizeof(char));
+    //strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
+#ifdef _WIN32
+    if (audio_decoder->filename == "") {
+        audio_decoder->filename = DS_GetDefaultDevice("a");
+        if (audio_decoder->filename == "") {
+            cout << "Fail to get default audio device, maybe no microphone." << endl;
+            return -1;
+        }
+    }
+    audio_decoder->filename = "audio=" + audio_decoder->filename;
+#elif __linux__
     strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
+#endif
 
     audio_encoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
 
