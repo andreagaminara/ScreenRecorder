@@ -61,10 +61,10 @@ int ScreenRecorder::stop(){
         audio_encoder->avcc = NULL;
 
         free(audio_decoder);
-        video_decoder = NULL;
+        audio_decoder = NULL;
 
         free(audio_encoder);
-        video_encoder = NULL;
+        audio_encoder = NULL;
     }
 
     avformat_close_input(&video_decoder->avfc);
