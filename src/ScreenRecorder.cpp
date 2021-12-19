@@ -483,14 +483,15 @@ int ScreenRecorder::open_audio_media() {
     audio_decoder->filename = (char *) malloc(50*sizeof(char));
     //strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
 #ifdef _WIN32
-    if (audio_decoder->filename == "") {
+    /*if (audio_decoder->filename == "") {
         audio_decoder->filename = DS_GetDefaultDevice("a");
         if (audio_decoder->filename == "") {
             cout << "Fail to get default audio device, maybe no microphone." << endl;
             return -1;
         }
     }
-    audio_decoder->filename = "audio=" + audio_decoder->filename;
+    audio_decoder->filename = "audio=" + audio_decoder->filename;*/
+    strcpy(audio_decoder->filename, "audio=Microfono (Realtek High Definition Audio)");
 #elif __linux__
     strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
 #endif
