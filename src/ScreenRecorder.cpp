@@ -23,9 +23,12 @@ int ScreenRecorder::start(){
         this->capture_video();
     });
 
-/*    audio_thread = new thread([this](){
-        this->capture_audio();
-    });*/
+    if(isAudio){
+        audio_thread = new thread([this](){
+            this->capture_audio();
+        });
+    }
+
     return 0;
 }
 
@@ -33,28 +36,50 @@ int ScreenRecorder::stop(){
     isRunning.exchange(false);
     cv.notify_all();
     video_thread->join();
-    //audio_thread->join();
+
+    if(isAudio){
+        audio_thread->join();
+    }
 
     av_write_trailer(out_avfc);
+
+    avformat_free_context(out_avfc);
+    out_avfc = NULL;
+
+    swr_free(&audioConverter);
+    av_audio_fifo_free(audioFifo);
+
+    if(isAudio){
+        avformat_close_input(&audio_decoder->avfc);
+        avformat_free_context(audio_decoder->avfc);
+        audio_decoder->avfc = NULL;
+
+        avcodec_free_context(&audio_decoder->avcc);
+        audio_decoder->avcc = NULL;
+
+        avcodec_free_context(&audio_encoder->avcc);
+        audio_encoder->avcc = NULL;
+
+        free(audio_decoder);
+        video_decoder = NULL;
+
+        free(audio_encoder);
+        video_encoder = NULL;
+    }
 
     avformat_close_input(&video_decoder->avfc);
     avformat_free_context(video_decoder->avfc);
     video_decoder->avfc = NULL;
 
-    avformat_close_input(&audio_decoder->avfc);
-    avformat_free_context(audio_decoder->avfc);
-    audio_decoder->avfc = NULL;
-
-    avformat_free_context(out_avfc);
-    out_avfc = NULL;
-
     avcodec_free_context(&video_decoder->avcc);
     video_decoder->avcc = NULL;
-    avcodec_free_context(&audio_decoder->avcc);
-    audio_decoder->avcc = NULL;
+
+    avcodec_free_context(&video_encoder->avcc);
+    video_encoder->avcc = NULL;
 
     free(video_decoder);
     video_decoder = NULL;
+
     free(video_encoder);
     video_encoder = NULL;
 
@@ -94,14 +119,23 @@ int ScreenRecorder::capture() {
     strcpy(audio_input_format, "alsa");
 #endif
 
+    isAudio = true;
+
+
+    if(isAudio){
+        if (open_audio_media()){
+            cout << "open_audio_media crash!" << endl;
+            return -1;
+        }
+
+        if (prepare_audio_decoder()){
+            cout << "prepare_audio_decoder crash!" << endl;
+            return -1;
+        }
+    }
 
     if (open_video_media()){
         cout << "open_video_media crash!" << endl;
-        return -1;
-    }
-
-    if (open_audio_media()){
-        cout << "open_audio_media crash!" << endl;
         return -1;
     }
 
@@ -110,10 +144,7 @@ int ScreenRecorder::capture() {
         return -1;
     }
 
-    if (prepare_audio_decoder()){
-        cout << "prepare_audio_decoder crash!" << endl;
-        return -1;
-    }
+
 
     avformat_alloc_output_context2(&(out_avfc), NULL, NULL, output_filename);
     if (!out_avfc) {
@@ -125,9 +156,12 @@ int ScreenRecorder::capture() {
         cout << "prepare_video_encoder crash!" << endl;
         return -1;
     }
-    if (prepare_audio_encoder()) {
-        cout << "prepare_audio_encoder crash!" << endl;
-        return -1;
+
+    if(isAudio) {
+        if (prepare_audio_encoder()) {
+            cout << "prepare_audio_encoder crash!" << endl;
+            return -1;
+        }
     }
 
     if (out_avfc->oformat->flags & AVFMT_GLOBALHEADER)
@@ -323,6 +357,10 @@ int ScreenRecorder::capture_audio() {
         else {
             cout << "ignoring all non video or audio packets" << endl;
         }
+
+        if (isPause){
+            cv.wait(ul, [this](){return !isPause || !isRunning;});
+        }
     }
 
     if (input_frame != NULL) {
@@ -408,7 +446,19 @@ int ScreenRecorder::open_video_media() {
     AVInputFormat *pAVInputFormat = av_find_input_format(video_input_format);
 
     AVDictionary *options = NULL;
-    int value = av_dict_set(&options, "video_size", "1920x960", 0);
+    int value = av_dict_set(&options, "video_size", "960x480", 0);
+    if (value < 0) {
+        cout << "no option" << endl;
+        return -1;
+    }
+
+    value = av_dict_set(&options, "offset_x", "960", 0);
+    if (value < 0) {
+        cout << "no option" << endl;
+        return -1;
+    }
+
+    value = av_dict_set(&options, "offset_y", "400", 0);
     if (value < 0) {
         cout << "no option" << endl;
         return -1;

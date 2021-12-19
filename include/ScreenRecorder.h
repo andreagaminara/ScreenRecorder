@@ -67,6 +67,8 @@ typedef struct StreamingContext {
 
 class ScreenRecorder {
 private:
+
+    bool isAudio;
     std::atomic_bool isRunning;
     std::atomic_bool isPause;
     std::mutex m;
