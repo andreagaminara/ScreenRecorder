@@ -182,24 +182,56 @@ int ScreenRecorder::capture() {
     }
 
     start();
-    this_thread::sleep_for(10s);
-    pause();
-    cout << "pause" << endl;
-    this_thread::sleep_for(10s);
-    cout << "resume" << endl;
-    cout << "resume" << endl;
-    resume();
-    this_thread::sleep_for(10s);
-    stop();
+        std::thread* controller_thread = new thread([this]() {
+        this->controller();
+        });
+    controller_thread->join();
+   
 
-/*    if (muxer_opts != NULL) {
-        av_dict_free(&muxer_opts);
-        muxer_opts = NULL;
-    }*/
+    /*    if (muxer_opts != NULL) {
+            av_dict_free(&muxer_opts);
+            muxer_opts = NULL;
+        }*/
 
     return 0;
 
 }
+
+void ScreenRecorder::controller() {
+    int action=0;
+    while (isRunning) {
+        cout << "Choose one action:\n1 = stop.\n2 = pause.\n3 = resume." << endl;
+        cin >> action;
+        std::cin.clear();
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        switch (action) {
+            case 1:
+                this->stop();
+                cout << "Video is now stopped." << endl;
+                break;
+            case 2:
+                if (!isPause) {
+                    this->pause();
+                    cout << "Video is now paused." << endl;
+                }
+                else cout << "Video already paused." << endl;
+                break;
+            case 3: 
+                if (isPause) {
+                    this->resume();
+                    cout << "Video is now resumed.\n" << endl;
+                }
+                else cout << "Video not paused." << endl;
+                break;
+            default:
+                cout << "Action not recognised." << endl;
+                
+        }
+
+            
+    }
+}
+
 
 int ScreenRecorder::capture_video(){
     unique_lock<mutex> ul(m);
