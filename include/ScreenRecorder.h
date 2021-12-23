@@ -111,6 +111,7 @@ public:
     int prepare_audio_encoder();
     int encode_video(AVFrame *input_frame, int i);
     int transcode_video(AVPacket *input_packet, AVFrame *input_frame, int i);
+    void controller();
 };
 
 
