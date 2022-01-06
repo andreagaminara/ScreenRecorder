@@ -34,7 +34,9 @@ int ScreenRecorder::start(){
 
 int ScreenRecorder::stop(){
     isRunning.exchange(false);
-    cv.notify_all();
+    cv1.notify_all();
+    cv2.notify_all();
+    
     video_thread->join();
 
     if(isAudio){
@@ -88,13 +90,26 @@ int ScreenRecorder::stop(){
 
 int ScreenRecorder::pause(){
     isPause.exchange(true);
+     if (isAudio) {
+        avformat_close_input(&audio_decoder->avfc);
+    }
     return 0;
 
 }
 
 int ScreenRecorder::resume(){
+     if (isAudio) {
+        AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
+
+        if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
+            cout << "failed to open input file " << audio_decoder->filename << endl;
+            return -1;
+        }
+
+    }
     isPause.exchange(false);
-    cv.notify_all();
+    cv1.notify_all();
+    cv2.notify_all();
     return 0;
 
 }
@@ -234,7 +249,7 @@ void ScreenRecorder::controller() {
 
 
 int ScreenRecorder::capture_video(){
-    unique_lock<mutex> ul(m);
+    unique_lock<mutex> ul(m1);
     int numFrames = 100;
     AVFrame *input_frame = av_frame_alloc();
     if (!input_frame) {
@@ -269,7 +284,7 @@ int ScreenRecorder::capture_video(){
         i++;
 
         if (isPause){
-            cv.wait(ul, [this](){return !isPause || !isRunning;});
+            cv1.wait(ul, [this](){return !isPause || !isRunning;});
         }
     }
     // TODO: should I also flush the audio video_encoder?
@@ -290,7 +305,7 @@ int ScreenRecorder::capture_video(){
 }
 
 int ScreenRecorder::capture_audio() {
-    unique_lock<mutex> ul(m);
+    unique_lock<mutex> ul(m2);
     int numFrames = 100;
     audioConverter = swr_alloc_set_opts(nullptr,
                                         av_get_default_channel_layout(audio_decoder->avcc->channels),
@@ -391,7 +406,7 @@ int ScreenRecorder::capture_audio() {
         }
 
         if (isPause){
-            cv.wait(ul, [this](){return !isPause || !isRunning;});
+            cv2.wait(ul, [this](){return !isPause || !isRunning;});
         }
     }
 
