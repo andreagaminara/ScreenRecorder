@@ -71,8 +71,10 @@ private:
     bool isAudio;
     std::atomic_bool isRunning;
     std::atomic_bool isPause;
-    std::mutex m;
-    std::condition_variable cv;
+    std::mutex m1;
+    std::mutex m2;
+    std::condition_variable cv1;
+    std::condition_variable cv2;
 
     char *video_input_format;
     char *audio_input_format;
