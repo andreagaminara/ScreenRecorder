@@ -11,11 +11,17 @@
 #include <fstream>
 #include <cstring>
 #include <math.h>
-#include <string.h>
+#include <string>
+#include <vector>
 #include <thread>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+
+#ifdef _WIN32
+    #include <windows.h>
+    #include <dshow.h>
+#endif
 
 #define __STDC_CONSTANT_MACROS
 
