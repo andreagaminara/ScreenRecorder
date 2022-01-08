@@ -524,21 +524,81 @@ int ScreenRecorder::open_video_media() {
     return 0;
 }
 
+static std::string unicode2utf8(const WCHAR* uni) {
+    static char temp[500];// max length of friendly name by UTF-16 is 128, so 500 in enough by utf-8
+    memset(temp, 0, 500);
+    WideCharToMultiByte(CP_UTF8, 0, uni, -1, temp, 500, NULL, NULL);
+    return std::string(temp);
+}
+
 int ScreenRecorder::open_audio_media() {
 
     audio_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
     audio_decoder->filename = (char *) malloc(50*sizeof(char));
     //strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
 #ifdef _WIN32
-    /*if (audio_decoder->filename == "") {
-        audio_decoder->filename = DS_GetDefaultDevice("a");
-        if (audio_decoder->filename == "") {
-            cout << "Fail to get default audio device, maybe no microphone." << endl;
-            return -1;
-        }
+   std::vector<std::string> vectorDevices;
+
+    GUID guidValue;
+   
+    guidValue = CLSID_AudioInputDeviceCategory;
+    
+    WCHAR FriendlyName[128];
+    HRESULT hr;
+
+    vectorDevices.clear();
+
+    hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    if (FAILED(hr))
+    {
+        return -1;
     }
-    audio_decoder->filename = "audio=" + audio_decoder->filename;*/
-    strcpy(audio_decoder->filename, "audio=Microfono (Realtek High Definition Audio)");
+
+    ICreateDevEnum* pSysDevEnum = NULL;
+    hr = CoCreateInstance(CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER, IID_ICreateDevEnum, (void**)&pSysDevEnum);
+    if (FAILED(hr))
+    {
+        CoUninitialize();
+        return -1;
+    }
+
+    IEnumMoniker* pEnumCat = NULL;
+    hr = pSysDevEnum->CreateClassEnumerator(guidValue, &pEnumCat, 0);
+    if (hr == S_OK)
+    {
+        IMoniker* pMoniker = NULL;
+        ULONG cFetched;
+        while (pEnumCat->Next(1, &pMoniker, &cFetched) == S_OK)
+        {
+            IPropertyBag* pPropBag;
+            hr = pMoniker->BindToStorage(NULL, NULL, IID_IPropertyBag, (void**)&pPropBag);
+            if (SUCCEEDED(hr))
+            {
+                VARIANT varName;
+                VariantInit(&varName);
+
+                hr = pPropBag->Read(L"FriendlyName", &varName, NULL);
+                if (SUCCEEDED(hr))
+                {
+                    StringCchCopy(FriendlyName, 128, varName.bstrVal);
+                    vectorDevices.push_back(unicode2utf8(FriendlyName));
+                }
+
+                VariantClear(&varName);
+                pPropBag->Release();
+            }
+
+            pMoniker->Release();
+        } // End for While
+
+        pEnumCat->Release();
+    }
+
+    pSysDevEnum->Release();
+    CoUninitialize();
+
+    string stringa = "audio=" + vectorDevices[0];
+    strcpy(audio_decoder->filename, stringa.c_str());
 #elif __linux__
     strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
 #endif
@@ -657,7 +717,7 @@ int ScreenRecorder::prepare_video_encoder() {
         return -1;
     }
 
-    av_opt_set(video_encoder->avcc->priv_data, "preset", "slow", 0);
+    av_opt_set(video_encoder->avcc->priv_data, "preset", "ultrafast", 0);
 
     //avcodec_parameters_from_context(video_encoder->avs->codecpar, video_encoder->avcc);
     video_encoder->avcc->height = video_decoder->avcc->height;
@@ -668,14 +728,14 @@ int ScreenRecorder::prepare_video_encoder() {
     else
         video_encoder->avcc->pix_fmt = video_decoder->avcc->pix_fmt;
 
-    video_encoder->avcc->bit_rate = 400000;
-    //video_encoder->avcc->rc_buffer_size = 4 * 1000 * 1000;
-    //video_encoder->avcc->rc_max_rate = 2 * 1000 * 1000;
-    //video_encoder->avcc->rc_min_rate = 2.5 * 1000 * 1000;
-
-    //video_encoder->avcc->time_base = av_inv_q(input_framerate);
+    //video_encoder->avcc->bit_rate = 400000;
+    video_encoder->avcc->bit_rate = 2500000;
+    
     video_encoder->avcc->time_base.num = 1;
     video_encoder->avcc->time_base.den = 15;
+    
+    video_encoder->avcc->gop_size = 15;     // 3
+    video_encoder->avcc->max_b_frames = 2;
 
     video_encoder->avs->time_base = video_encoder->avcc->time_base;
 
