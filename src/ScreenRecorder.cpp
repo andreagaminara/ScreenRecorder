@@ -12,34 +12,11 @@ ScreenRecorder::ScreenRecorder()
 }
 
 /* uninitialize the resources */
-ScreenRecorder::~ScreenRecorder(){
-}
+ScreenRecorder::~ScreenRecorder() {
 
-int ScreenRecorder::start(){
-
-    isRunning = true;
-    isPause = false;
-    video_thread = new thread([this](){
-        this->capture_video();
-    });
-
-    if(isAudio){
-        audio_thread = new thread([this](){
-            this->capture_audio();
-        });
-    }
-
-    return 0;
-}
-
-int ScreenRecorder::stop(){
-    isRunning.exchange(false);
-    cv1.notify_all();
-    cv2.notify_all();
-    
     video_thread->join();
 
-    if(isAudio){
+    if (isAudio) {
         audio_thread->join();
     }
 
@@ -51,7 +28,7 @@ int ScreenRecorder::stop(){
     swr_free(&audioConverter);
     av_audio_fifo_free(audioFifo);
 
-    if(isAudio){
+    if (isAudio) {
         avformat_close_input(&audio_decoder->avfc);
         avformat_free_context(audio_decoder->avfc);
         audio_decoder->avfc = NULL;
@@ -84,21 +61,50 @@ int ScreenRecorder::stop(){
 
     free(video_encoder);
     video_encoder = NULL;
+}
+
+int ScreenRecorder::start() {
+
+    isRunning = true;
+    isPause = false;
+    video_thread = new thread([this]() {
+        this->capture_video();
+        });
+
+    if (isAudio) {
+        audio_thread = new thread([this]() {
+            this->capture_audio();
+            });
+    }
 
     return 0;
 }
 
-int ScreenRecorder::pause(){
+int ScreenRecorder::stop() {
+    unique_lock<mutex> ul(m);
+    isRunning.exchange(false);
+    cv.notify_all();
+    //cv1.notify_all();
+    //cv2.notify_all();
+    
+   
+
+    return 0;
+}
+
+int ScreenRecorder::pause() {
+    
     isPause.exchange(true);
-     if (isAudio) {
+    if (isAudio) {
         avformat_close_input(&audio_decoder->avfc);
     }
     return 0;
 
 }
 
-int ScreenRecorder::resume(){
-     if (isAudio) {
+int ScreenRecorder::resume() {
+    unique_lock<mutex> ul(m);
+    if (isAudio) {
         AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
 
         if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
@@ -108,8 +114,10 @@ int ScreenRecorder::resume(){
 
     }
     isPause.exchange(false);
-    cv1.notify_all();
-    cv2.notify_all();
+    cv.notify_all();
+
+    //cv1.notify_all();
+    //cv2.notify_all();
     return 0;
 
 }
@@ -118,13 +126,13 @@ int ScreenRecorder::capture() {
 
     avdevice_register_all();
 
-    output_filename = (char *)malloc(50*sizeof(char));
+    output_filename = (char*)malloc(50 * sizeof(char));
     strcpy(output_filename, "output.mp4");
 
 
-    video_input_format = (char *)malloc(50*sizeof(char));
+    video_input_format = (char*)malloc(50 * sizeof(char));
 
-    audio_input_format = (char *)malloc(50*sizeof(char));
+    audio_input_format = (char*)malloc(50 * sizeof(char));
 
 #ifdef _WIN32
     strcpy(video_input_format, "gdigrab");
@@ -137,19 +145,19 @@ int ScreenRecorder::capture() {
     isAudio = true;
 
 
-    if(isAudio){
-        if (open_audio_media()){
+    if (isAudio) {
+        if (open_audio_media()) {
             cout << "open_audio_media crash!" << endl;
             return -1;
         }
 
-        if (prepare_audio_decoder()){
+        if (prepare_audio_decoder()) {
             cout << "prepare_audio_decoder crash!" << endl;
             return -1;
         }
     }
 
-    if (open_video_media()){
+    if (open_video_media()) {
         cout << "open_video_media crash!" << endl;
         return -1;
     }
@@ -172,7 +180,7 @@ int ScreenRecorder::capture() {
         return -1;
     }
 
-    if(isAudio) {
+    if (isAudio) {
         if (prepare_audio_encoder()) {
             cout << "prepare_audio_encoder crash!" << endl;
             return -1;
@@ -197,12 +205,20 @@ int ScreenRecorder::capture() {
     }
 
     start();
-        std::thread* controller_thread = new thread([this]() {
-        this->controller();
-        });
-    controller_thread->join();
-   
-
+    this_thread::sleep_for(5s);
+    cout << "5 sec" << endl;
+    this_thread::sleep_for(5s);
+    /*pause();
+    cout << "pause" << endl;
+    cout << "pause" << endl;
+    this_thread::sleep_for(5s);
+    cout << "resume" << endl;
+    cout << "resume" << endl;
+    resume();
+    this_thread::sleep_for(5s);*/
+    cout << "Before stop" << endl;
+    stop();
+    cout << "After stop" << endl;
     /*    if (muxer_opts != NULL) {
             av_dict_free(&muxer_opts);
             muxer_opts = NULL;
@@ -212,62 +228,33 @@ int ScreenRecorder::capture() {
 
 }
 
-void ScreenRecorder::controller() {
-    int action=0;
-    while (isRunning) {
-        cout << "Choose one action:\n1 = stop.\n2 = pause.\n3 = resume." << endl;
-        cin >> action;
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        switch (action) {
-            case 1:
-                this->stop();
-                cout << "Video is now stopped." << endl;
-                break;
-            case 2:
-                if (!isPause) {
-                    this->pause();
-                    cout << "Video is now paused." << endl;
-                }
-                else cout << "Video already paused." << endl;
-                break;
-            case 3: 
-                if (isPause) {
-                    this->resume();
-                    cout << "Video is now resumed.\n" << endl;
-                }
-                else cout << "Video not paused." << endl;
-                break;
-            default:
-                cout << "Action not recognised." << endl;
-                
-        }
-
-            
-    }
-}
-
-
-int ScreenRecorder::capture_video(){
-    unique_lock<mutex> ul(m1);
+int ScreenRecorder::capture_video() {
+   
+    //unique_lock<mutex> ul(m1);
     int numFrames = 100;
-    AVFrame *input_frame = av_frame_alloc();
+    AVFrame* input_frame = av_frame_alloc();
     if (!input_frame) {
         cout << "failed to allocated memory for AVFrame" << endl;
         return -1;
     }
 
-    AVPacket *input_packet = av_packet_alloc();
+    AVPacket* input_packet = av_packet_alloc();
     if (!input_packet) {
         cout << "failed to allocated memory for AVPacket" << endl;
         return -1;
     }
 
-    int i=0;
+    int i = 0;
 
     while (isRunning)
     {
-        if(av_read_frame(video_decoder->avfc, input_packet) < 0)
+        unique_lock<mutex> ul(m);
+        if (isPause) {
+            cv.wait(ul, [this]() {return !isPause || !isRunning;});
+            //cv1.wait(ul, [this]() {return !isPause || !isRunning;});
+        }
+        ul.unlock();
+        if (av_read_frame(video_decoder->avfc, input_packet) < 0)
             cout << "Error reading video frame" << endl;
 
         if (video_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
@@ -282,10 +269,6 @@ int ScreenRecorder::capture_video(){
         }
 
         i++;
-
-        if (isPause){
-            cv1.wait(ul, [this](){return !isPause || !isRunning;});
-        }
     }
     // TODO: should I also flush the audio video_encoder?
     //if (encode_video(NULL))
@@ -305,35 +288,35 @@ int ScreenRecorder::capture_video(){
 }
 
 int ScreenRecorder::capture_audio() {
-    unique_lock<mutex> ul(m2);
+    //unique_lock<mutex> ul(m2);
     int numFrames = 100;
     audioConverter = swr_alloc_set_opts(nullptr,
-                                        av_get_default_channel_layout(audio_decoder->avcc->channels),
-                                        AV_SAMPLE_FMT_FLTP,
-                                        audio_decoder->avcc->sample_rate,
-                                        av_get_default_channel_layout(audio_decoder->avcc->channels),
-                                        (AVSampleFormat)audio_decoder->avs->codecpar->format,
-                                        audio_decoder->avs->codecpar->sample_rate,
-                                        0, nullptr);
+        av_get_default_channel_layout(audio_decoder->avcc->channels),
+        AV_SAMPLE_FMT_FLTP,
+        audio_decoder->avcc->sample_rate,
+        av_get_default_channel_layout(audio_decoder->avcc->channels),
+        (AVSampleFormat)audio_decoder->avs->codecpar->format,
+        audio_decoder->avs->codecpar->sample_rate,
+        0, nullptr);
     swr_init(audioConverter);
 
     // 2 seconds FIFO buffer
     audioFifo = av_audio_fifo_alloc(AV_SAMPLE_FMT_FLTP, audio_decoder->avcc->channels,
-                                    audio_decoder->avcc->sample_rate * 2);
-    
-    AVFrame *input_frame = av_frame_alloc();
+        audio_decoder->avcc->sample_rate * 2);
+
+    AVFrame* input_frame = av_frame_alloc();
     if (!input_frame) {
         cout << "failed to allocated memory for AVFrame" << endl;
         return -1;
     }
 
-    AVPacket *input_packet = av_packet_alloc();
+    AVPacket* input_packet = av_packet_alloc();
     if (!input_packet) {
         cout << "failed to allocated memory for AVPacket" << endl;
         return -1;
     }
 
-    AVPacket *outputPacket = av_packet_alloc();
+    AVPacket* outputPacket = av_packet_alloc();
     if (!outputPacket) {
         cout << "failed to allocated memory for AVPacket" << endl;
         return -1;
@@ -343,12 +326,18 @@ int ScreenRecorder::capture_audio() {
 
     while (isRunning)
     {
-        if(av_read_frame(audio_decoder->avfc, input_packet) < 0){
+        unique_lock<mutex> ul(m);
+        if (isPause) {
+            cv.wait(ul, [this]() {return !isPause || !isRunning;});
+            //cv2.wait(ul, [this]() {return !isPause || !isRunning;});
+        }
+        ul.unlock();
+        if (av_read_frame(audio_decoder->avfc, input_packet) < 0) {
             cout << "Error reading audio frame" << endl;
             return -1;
         }
 
-        if (audio_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)  {
+        if (audio_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 
             if (transcode_audio(input_packet, input_frame))
                 return -1;
@@ -364,11 +353,11 @@ int ScreenRecorder::capture_audio() {
                 outputFrame->sample_rate = audio_encoder->avcc->sample_rate;
 
                 ret = av_frame_get_buffer(outputFrame, 0);
-                if(ret < 0){
+                if (ret < 0) {
                     cout << "errore" << endl;
                 }
                 ret = av_audio_fifo_read(audioFifo, (void**)outputFrame->data, audio_encoder->avcc->frame_size);
-                if(ret < 0){
+                if (ret < 0) {
                     cout << "errore" << endl;
                 }
 
@@ -396,7 +385,7 @@ int ScreenRecorder::capture_audio() {
 
                 i++;
 
-                ret = av_write_frame(out_avfc, outputPacket);
+                ret = av_interleaved_write_frame(out_avfc, outputPacket);
                 av_packet_unref(outputPacket);
 
             }
@@ -405,9 +394,7 @@ int ScreenRecorder::capture_audio() {
             cout << "ignoring all non video or audio packets" << endl;
         }
 
-        if (isPause){
-            cv2.wait(ul, [this](){return !isPause || !isRunning;});
-        }
+       
     }
 
     if (input_frame != NULL) {
@@ -423,9 +410,9 @@ int ScreenRecorder::capture_audio() {
     return 0;
 }
 
-int ScreenRecorder::transcode_audio(AVPacket *input_packet, AVFrame *input_frame) {
+int ScreenRecorder::transcode_audio(AVPacket* input_packet, AVFrame* input_frame) {
 
-    uint8_t **cSamples = nullptr;
+    uint8_t** cSamples = nullptr;
 
     int response = avcodec_send_packet(audio_decoder->avcc, input_packet);
     if (response < 0) {
@@ -450,7 +437,7 @@ int ScreenRecorder::transcode_audio(AVPacket *input_packet, AVFrame *input_frame
         cout << "Fail to swr_convert." << endl;
         return response;
     }
-    if (av_audio_fifo_space(audioFifo) < input_frame->nb_samples){
+    if (av_audio_fifo_space(audioFifo) < input_frame->nb_samples) {
         cout << "audio buffer is too small." << endl;
         return response;
     }
@@ -472,8 +459,8 @@ int ScreenRecorder::transcode_audio(AVPacket *input_packet, AVFrame *input_frame
 int ScreenRecorder::open_video_media() {
 
 
-    video_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
-    video_decoder->filename = (char *) malloc(50*sizeof(char));
+    video_decoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
+    video_decoder->filename = (char*)malloc(50 * sizeof(char));
 #ifdef _WIN32
     strcpy(video_decoder->filename, "desktop");
 #elif __linux__
@@ -481,7 +468,7 @@ int ScreenRecorder::open_video_media() {
 #endif
 
 
-    video_encoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
+    video_encoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
 
     video_decoder->avfc = avformat_alloc_context();
 
@@ -490,22 +477,28 @@ int ScreenRecorder::open_video_media() {
         return -1;
     }
 
-    AVInputFormat *pAVInputFormat = av_find_input_format(video_input_format);
+    AVInputFormat* pAVInputFormat = av_find_input_format(video_input_format);
 
-    AVDictionary *options = NULL;
-    int value = av_dict_set(&options, "video_size", "960x480", 0);
+    AVDictionary* options = NULL;
+    int value = av_dict_set(&options, "video_size", "1920x960", 0);
     if (value < 0) {
         cout << "no option" << endl;
         return -1;
     }
 
-    value = av_dict_set(&options, "offset_x", "960", 0);
+    /*value = av_dict_set(&options, "itsoffset", "-30", 0);
+    if (value < 0) {
+        cout << "no option" << endl;
+        return -1;
+    }*/
+
+    value = av_dict_set(&options, "offset_x", "0", 0);
     if (value < 0) {
         cout << "no option" << endl;
         return -1;
     }
 
-    value = av_dict_set(&options, "offset_y", "400", 0);
+    value = av_dict_set(&options, "offset_y", "0", 0);
     if (value < 0) {
         cout << "no option" << endl;
         return -1;
@@ -524,20 +517,24 @@ int ScreenRecorder::open_video_media() {
     return 0;
 }
 
+#ifdef _WIN32
 static std::string unicode2utf8(const WCHAR* uni) {
     static char temp[500];// max length of friendly name by UTF-16 is 128, so 500 in enough by utf-8
     memset(temp, 0, 500);
     WideCharToMultiByte(CP_UTF8, 0, uni, -1, temp, 500, NULL, NULL);
     return std::string(temp);
 }
+#endif
+
 
 int ScreenRecorder::open_audio_media() {
 
-    audio_decoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
-    audio_decoder->filename = (char *) malloc(50*sizeof(char));
+    audio_decoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
+    audio_decoder->filename = (char*)malloc(50 * sizeof(char));
     //strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
 #ifdef _WIN32
-   std::vector<std::string> vectorDevices;
+
+    std::vector<std::string> vectorDevices;
 
     GUID guidValue;
    
@@ -603,7 +600,7 @@ int ScreenRecorder::open_audio_media() {
     strcpy(audio_decoder->filename, "sysdefault:CARD=I82801AAICH");
 #endif
 
-    audio_encoder = (StreamingContext*) calloc(1, sizeof(StreamingContext));
+    audio_encoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
 
     audio_decoder->avfc = avformat_alloc_context();
 
@@ -612,9 +609,11 @@ int ScreenRecorder::open_audio_media() {
         return -1;
     }
 
-    AVInputFormat *pAVInputFormat = av_find_input_format(audio_input_format);
+    AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
 
-    if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
+    AVDictionary* options = NULL;
+
+    if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, &options) != 0) {
         cout << "failed to open input file " << audio_decoder->filename << endl;
         return -1;
     }
@@ -626,6 +625,7 @@ int ScreenRecorder::open_audio_media() {
 
     return 0;
 }
+
 
 int ScreenRecorder::prepare_video_decoder() {
     for (int i = 0; i < video_decoder->avfc->nb_streams; i++) {
@@ -702,7 +702,7 @@ int ScreenRecorder::prepare_audio_decoder() {
 }
 
 int ScreenRecorder::prepare_video_encoder() {
-    AVRational input_framerate = av_guess_frame_rate(video_decoder->avfc, video_decoder->avs, NULL);
+    //AVRational input_framerate = av_guess_frame_rate(video_decoder->avfc, video_decoder->avs, NULL);
     video_encoder->avs = avformat_new_stream(out_avfc, NULL);
 
     video_encoder->avc = avcodec_find_encoder(AV_CODEC_ID_H264);
@@ -717,7 +717,7 @@ int ScreenRecorder::prepare_video_encoder() {
         return -1;
     }
 
-    av_opt_set(video_encoder->avcc->priv_data, "preset", "ultrafast", 0);
+    av_opt_set(video_encoder->avcc, "preset", "ultrafast", 0);
 
     //avcodec_parameters_from_context(video_encoder->avs->codecpar, video_encoder->avcc);
     video_encoder->avcc->height = video_decoder->avcc->height;
@@ -730,10 +730,11 @@ int ScreenRecorder::prepare_video_encoder() {
 
     //video_encoder->avcc->bit_rate = 400000;
     video_encoder->avcc->bit_rate = 2500000;
-    
+
+
     video_encoder->avcc->time_base.num = 1;
     video_encoder->avcc->time_base.den = 15;
-    
+
     video_encoder->avcc->gop_size = 15;     // 3
     video_encoder->avcc->max_b_frames = 2;
 
@@ -747,7 +748,7 @@ int ScreenRecorder::prepare_video_encoder() {
     return 0;
 }
 
-int ScreenRecorder::prepare_audio_encoder(){
+int ScreenRecorder::prepare_audio_encoder() {
     audio_encoder->avs = avformat_new_stream(out_avfc, NULL);
 
     audio_encoder->avc = avcodec_find_encoder(AV_CODEC_ID_AAC);
@@ -764,11 +765,11 @@ int ScreenRecorder::prepare_audio_encoder(){
 
     //int OUTPUT_CHANNELS = 2;
     //int OUTPUT_BIT_RATE = 196000;
-    audio_encoder->avcc->channels       = audio_decoder->avs->codecpar->channels;
+    audio_encoder->avcc->channels = audio_decoder->avs->codecpar->channels;
     audio_encoder->avcc->channel_layout = av_get_default_channel_layout(audio_decoder->avs->codecpar->channels);
-    audio_encoder->avcc->sample_rate    = audio_decoder->avs->codecpar->sample_rate;
-    audio_encoder->avcc->sample_fmt     = audio_encoder->avc->sample_fmts[0];
-    audio_encoder->avcc->bit_rate       = 32000;
+    audio_encoder->avcc->sample_rate = audio_decoder->avs->codecpar->sample_rate;
+    audio_encoder->avcc->sample_fmt = audio_encoder->avc->sample_fmts[0];
+    audio_encoder->avcc->bit_rate = 32000;
     //audio_encoder->avcc->time_base      = (AVRational){1, audio_encoder->avcc->sample_rate};
     audio_encoder->avcc->time_base.num = 1;
     audio_encoder->avcc->time_base.den = audio_encoder->avcc->sample_rate;
@@ -785,13 +786,13 @@ int ScreenRecorder::prepare_audio_encoder(){
     return 0;
 }
 
-int ScreenRecorder::encode_video(AVFrame *input_frame, int i) {
+int ScreenRecorder::encode_video(AVFrame* input_frame, int i) {
     if (input_frame)
         input_frame->pict_type = AV_PICTURE_TYPE_NONE;
 
-    AVPacket *output_packet = av_packet_alloc();
+    AVPacket* output_packet = av_packet_alloc();
     if (!output_packet) {
-        cout <<"could not allocate memory for output packet" << endl;
+        cout << "could not allocate memory for output packet" << endl;
         return -1;
     }
 
@@ -810,11 +811,14 @@ int ScreenRecorder::encode_video(AVFrame *input_frame, int i) {
         output_packet->stream_index = video_decoder->stream_index;
         output_packet->duration = video_encoder->avs->time_base.den / video_encoder->avs->time_base.num / video_decoder->avs->avg_frame_rate.num * video_decoder->avs->avg_frame_rate.den;
         output_packet->dts = output_packet->pts = i * 1024;
+        
+        //output_packet->dts = output_packet->pts = av_rescale_q(1, video_encoder->avcc->time_base, video_encoder->avs->time_base);
+        //cout << output_packet->dts << endl;
         //av_packet_rescale_ts(output_packet, video_decoder->avs->time_base, video_encoder->avs->time_base);
-
+        
         response = av_interleaved_write_frame(out_avfc, output_packet);
         if (response != 0) {
-            cout << "Error "<< response <<" while receiving packet from video_decoder" << endl;
+            cout << "Error " << response << " while receiving packet from video_decoder" << endl;
             return -1;
         }
     }
@@ -823,7 +827,7 @@ int ScreenRecorder::encode_video(AVFrame *input_frame, int i) {
     return 0;
 }
 
-int ScreenRecorder::transcode_video(AVPacket *input_packet, AVFrame *input_frame, int i) {
+int ScreenRecorder::transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i) {
     int response = avcodec_send_packet(video_decoder->avcc, input_packet);
     if (response < 0) {
         cout << "Error while sending packet to video_decoder" << endl;
@@ -841,20 +845,20 @@ int ScreenRecorder::transcode_video(AVPacket *input_packet, AVFrame *input_frame
         }
 
         int nbytes = av_image_get_buffer_size(video_encoder->avcc->pix_fmt, video_encoder->avcc->width, video_encoder->avcc->height, 32);
-        uint8_t *video_outbuf = (uint8_t*)av_malloc(nbytes);
-        if( video_outbuf == NULL )
+        uint8_t* video_outbuf = (uint8_t*)av_malloc(nbytes);
+        if (video_outbuf == NULL)
         {
-            cout<<"\nunable to allocate memory";
+            cout << "\nunable to allocate memory";
             exit(1);
         }
 
-        AVFrame *output_frame = av_frame_alloc();
-        int value = av_image_fill_arrays(output_frame->data, output_frame->linesize, video_outbuf , AV_PIX_FMT_YUV420P, video_encoder->avcc->width, video_encoder->avcc->height, 1 ); // returns : the size in bytes required for src
-        if(value < 0)
+        AVFrame* output_frame = av_frame_alloc();
+        int value = av_image_fill_arrays(output_frame->data, output_frame->linesize, video_outbuf, AV_PIX_FMT_YUV420P, video_encoder->avcc->width, video_encoder->avcc->height, 1); // returns : the size in bytes required for src
+        if (value < 0)
         {
-            cout<<"error in filling image array" <<endl;
+            cout << "error in filling image array" << endl;
         }
-        SwsContext* swsCtx_ ;
+        SwsContext* swsCtx_;
         swsCtx_ = sws_getContext(video_decoder->avcc->width, video_decoder->avcc->height, video_decoder->avcc->pix_fmt, video_encoder->avcc->width, video_encoder->avcc->height, video_encoder->avcc->pix_fmt, SWS_BICUBIC, NULL, NULL, NULL);
 
         sws_scale(swsCtx_, input_frame->data, input_frame->linesize, 0, video_decoder->avcc->height, output_frame->data, output_frame->linesize);
