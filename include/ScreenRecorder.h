@@ -34,7 +34,7 @@ extern "C"
 #include "libavdevice/avdevice.h"
 
 #include "libavfilter/avfilter.h"
-//#include "libavfilter/avfiltergraph.h"
+    //#include "libavfilter/avfiltergraph.h"
 #include "libavfilter/buffersink.h"
 #include "libavfilter/buffersrc.h"
 
@@ -63,12 +63,12 @@ extern "C"
 }
 
 typedef struct StreamingContext {
-    AVFormatContext *avfc;
-    AVCodec *avc;
-    AVStream *avs;
-    AVCodecContext *avcc;
+    AVFormatContext* avfc;
+    AVCodec* avc;
+    AVStream* avs;
+    AVCodecContext* avcc;
     int stream_index;
-    char *filename;
+    char* filename;
 } StreamingContext;
 
 class ScreenRecorder {
@@ -77,27 +77,29 @@ private:
     bool isAudio;
     std::atomic_bool isRunning;
     std::atomic_bool isPause;
-    std::mutex m1;
-    std::mutex m2;
-    std::condition_variable cv1;
-    std::condition_variable cv2;
+    std::mutex m;
+    //std::mutex m1;
+    //std::mutex m2;
+    std::condition_variable cv;
+    //std::condition_variable cv1;
+    //std::condition_variable cv2;
 
-    char *video_input_format;
-    char *audio_input_format;
+    char* video_input_format;
+    char* audio_input_format;
 
-    StreamingContext *video_decoder;
-    StreamingContext *video_encoder;
-    std::thread      *video_thread;
+    StreamingContext* video_decoder;
+    StreamingContext* video_encoder;
+    std::thread* video_thread;
 
-    StreamingContext *audio_decoder;
-    StreamingContext *audio_encoder;
-    SwrContext       *audioConverter;
-    AVAudioFifo      *audioFifo;
-    std::thread      *audio_thread;
+    StreamingContext* audio_decoder;
+    StreamingContext* audio_encoder;
+    SwrContext* audioConverter;
+    AVAudioFifo* audioFifo;
+    std::thread* audio_thread;
 
-    AVFormatContext  *out_avfc;
+    AVFormatContext* out_avfc;
 
-    char *output_filename;
+    char* output_filename;
 
 public:
     ScreenRecorder();
@@ -110,16 +112,15 @@ public:
     int capture();
     int capture_video();
     int capture_audio();
-    int transcode_audio(AVPacket *input_packet, AVFrame *input_frame);
+    int transcode_audio(AVPacket* input_packet, AVFrame* input_frame);
     int open_video_media();
     int open_audio_media();
     int prepare_video_decoder();
     int prepare_audio_decoder();
     int prepare_video_encoder();
     int prepare_audio_encoder();
-    int encode_video(AVFrame *input_frame, int i);
-    int transcode_video(AVPacket *input_packet, AVFrame *input_frame, int i);
-    void controller();
+    int encode_video(AVFrame* input_frame, int i);
+    int transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i);
 };
 
 
