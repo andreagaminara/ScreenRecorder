@@ -95,9 +95,6 @@ int ScreenRecorder::stop() {
 int ScreenRecorder::pause() {
     
     isPause.exchange(true);
-    if (isAudio) {
-        avformat_close_input(&audio_decoder->avfc);
-    }
     return 0;
 
 }
@@ -205,34 +202,25 @@ int ScreenRecorder::capture() {
     }
 
     start();
-    
-    /*this_thread::sleep_for(5s);
-    cout << "5 sec" << endl;
-    this_thread::sleep_for(5s);
-    /*pause();
+    this_thread::sleep_for(15s);
+    pause();
     cout << "pause" << endl;
     cout << "pause" << endl;
-    this_thread::sleep_for(5s);
+    this_thread::sleep_for(10s);
     cout << "resume" << endl;
     cout << "resume" << endl;
     resume();
-    this_thread::sleep_for(5s);*/
+    this_thread::sleep_for(10s);
     cout << "Before stop" << endl;
     stop();
     cout << "After stop" << endl;
-    /*    if (muxer_opts != NULL) {
-            av_dict_free(&muxer_opts);
-            muxer_opts = NULL;
-        }*/
 
-    return 0;
-
-}*/
+/*    start();
     std::thread* controller_thread = new thread([this]() {
         this->controller();
         });
-    controller_thread->join();
-   
+    controller_thread->join();*/
+   //controller();
 
     /*    if (muxer_opts != NULL) {
             av_dict_free(&muxer_opts);
@@ -245,6 +233,7 @@ int ScreenRecorder::capture() {
 
 void ScreenRecorder::controller() {
     int action=0;
+    start();
     while (isRunning) {
         cout << "Choose one action:\n1 = stop.\n2 = pause.\n3 = resume." << endl;
         cin >> action;
@@ -378,7 +367,15 @@ int ScreenRecorder::capture_audio() {
     {
         unique_lock<mutex> ul(m);
         if (isPause) {
+            avformat_close_input(&audio_decoder->avfc);
+
             cv.wait(ul, [this]() {return !isPause || !isRunning;});
+
+/*            AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
+            if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
+                cout << "failed to open input file " << audio_decoder->filename << endl;
+                return -1;
+            }*/
             //cv2.wait(ul, [this]() {return !isPause || !isRunning;});
         }
         ul.unlock();
