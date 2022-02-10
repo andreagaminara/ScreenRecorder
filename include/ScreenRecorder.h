@@ -19,8 +19,8 @@
 #include <condition_variable>
 
 #ifdef _WIN32
-    #include <windows.h>
-    #include <dshow.h>
+#include <windows.h>
+#include <dshow.h>
 #endif
 
 #define __STDC_CONSTANT_MACROS
@@ -34,7 +34,6 @@ extern "C"
 #include "libavdevice/avdevice.h"
 
 #include "libavfilter/avfilter.h"
-    //#include "libavfilter/avfiltergraph.h"
 #include "libavfilter/buffersink.h"
 #include "libavfilter/buffersrc.h"
 
@@ -78,11 +77,7 @@ private:
     std::atomic_bool isRunning;
     std::atomic_bool isPause;
     std::mutex m;
-    //std::mutex m1;
-    //std::mutex m2;
     std::condition_variable cv;
-    //std::condition_variable cv1;
-    //std::condition_variable cv2;
 
     char* video_input_format;
     char* audio_input_format;
@@ -100,6 +95,13 @@ private:
     AVFormatContext* out_avfc;
 
     char* output_filename;
+
+    int screen_width;
+    int screen_height;
+    int video_width;
+    int video_height;
+    int offset_x;
+    int offset_y;
 
 public:
     ScreenRecorder();
@@ -122,6 +124,7 @@ public:
     int encode_video(AVFrame* input_frame, int i);
     int transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i);
     void controller();
+
 };
 
 
