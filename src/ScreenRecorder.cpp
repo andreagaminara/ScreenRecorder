@@ -77,51 +77,37 @@ ScreenRecorder::~ScreenRecorder() {
     video_encoder = NULL;
 }
 
-int ScreenRecorder::start() {
+int ScreenRecorder::start() throw() {
 
     isRunning = true;
     isPause = false;
 
-    if (isAudio) {
-        if (open_audio_media()) {
-            cout << "open_audio_media crash!" << endl;
-            return -1;
+    try{
+        if (isAudio) {
+            open_audio_media();
+            prepare_audio_decoder();
         }
-
-        if (prepare_audio_decoder()) {
-            cout << "prepare_audio_decoder crash!" << endl;
-            return -1;
-        }
+        open_video_media();
+        prepare_video_decoder();
+    }
+    catch (ScreenRecorderException e) {
+        throw e;
     }
 
-    if (open_video_media()) {
-        cout << "open_video_media crash!" << endl;
-        return -1;
-    }
-
-    if (prepare_video_decoder()) {
-        cout << "prepare_video_decoder crash!" << endl;
-        return -1;
-    }
-
-
-
+    
     avformat_alloc_output_context2(&(out_avfc), NULL, NULL, output_filename);
     if (!out_avfc) {
-        cout << "could not allocate memory for output format" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for output format");
     }
 
-    if (prepare_video_encoder()) {
-        cout << "prepare_video_encoder crash!" << endl;
-        return -1;
-    }
-
-    if (isAudio) {
-        if (prepare_audio_encoder()) {
-            cout << "prepare_audio_encoder crash!" << endl;
-            return -1;
+    try {
+        prepare_video_encoder();
+        if (isAudio) {
+            prepare_audio_encoder();
         }
+    }
+    catch (ScreenRecorderException e) {
+        throw e;
     }
 
     if (out_avfc->oformat->flags & AVFMT_GLOBALHEADER)
@@ -129,24 +115,27 @@ int ScreenRecorder::start() {
 
     if (!(out_avfc->oformat->flags & AVFMT_NOFILE)) {
         if (avio_open(&out_avfc->pb, output_filename, AVIO_FLAG_WRITE) < 0) {
-            cout << "could not open the output file" << endl;
-            return -1;
+            throw ScreenRecorderException("Failed to open the output file");
         }
     }
 
     if (avformat_write_header(out_avfc, NULL) < 0) {
-        cout << "an error occurred when opening output file" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to open the output file");
     }
 
-    video_thread = new thread([this]() {
-        this->capture_video();
-        });
-
-    if (isAudio) {
-        audio_thread = new thread([this]() {
-            this->capture_audio();
+    try {
+        video_thread = new thread([this]() {
+            this->capture_video();
             });
+
+        if (isAudio) {
+            audio_thread = new thread([this]() {
+                this->capture_audio();
+                });
+        }
+    }
+    catch (ScreenRecorderException e) {
+        throw e;
     }
 
     return 0;
@@ -169,7 +158,7 @@ int ScreenRecorder::pause() {
 
 int ScreenRecorder::resume() {
     unique_lock<mutex> ul(m);
-    if (isAudio) {
+    /*if (isAudio) {
         AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
 
         if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
@@ -177,7 +166,7 @@ int ScreenRecorder::resume() {
             return -1;
         }
 
-    }
+    }*/
     isPause.exchange(false);
     cv.notify_all();
 
@@ -186,7 +175,7 @@ int ScreenRecorder::resume() {
 }
 
 
-int ScreenRecorder::capture() {
+int ScreenRecorder::capture() throw() {
 
     output_filename = (char*)malloc(50 * sizeof(char));
 
@@ -242,8 +231,6 @@ int ScreenRecorder::capture() {
     strcpy(audio_input_format, "alsa");
 #endif
 
-
-
     /*start();
     this_thread::sleep_for(15s);
     pause();
@@ -259,13 +246,18 @@ int ScreenRecorder::capture() {
     cout << "After stop" << endl;
     */
 
-    controller();
+    try {
+        controller();
+    }
+    catch (ScreenRecorderException e) {
+        throw e;
+    }
 
     return 0;
 
 }
 
-void ScreenRecorder::controller() {
+void ScreenRecorder::controller() throw() {
     int action;
     bool endRecording = false;
     while (!endRecording) {
@@ -276,8 +268,13 @@ void ScreenRecorder::controller() {
         switch (action) {
         case 0:
             if(!isRunning){
-                this->start();
-                cout << "Video recording is now started." << endl;
+                try {
+                    this->start();
+                    cout << "Video recording is now started." << endl;
+                }
+                catch (ScreenRecorderException e) {
+                    throw e;
+                }
             }
             else cout << "Video recording already started." << endl;
             break;
@@ -307,19 +304,17 @@ void ScreenRecorder::controller() {
     }
 }
 
-int ScreenRecorder::capture_video() {
+int ScreenRecorder::capture_video() throw() {
 
     int numFrames = 100;
     AVFrame* input_frame = av_frame_alloc();
     if (!input_frame) {
-        cout << "failed to allocated memory for AVFrame" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for AVFrame");
     }
 
     AVPacket* input_packet = av_packet_alloc();
     if (!input_packet) {
-        cout << "failed to allocated memory for AVPacket" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocated memory for AVPacket");
     }
 
     int i = 0;
@@ -332,16 +327,19 @@ int ScreenRecorder::capture_video() {
         }
         ul.unlock();
         if (av_read_frame(video_decoder->avfc, input_packet) < 0)
-            cout << "Error reading video frame" << endl;
+            throw ScreenRecorderException("Error in reading video frame");
 
         if (video_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            if (transcode_video(input_packet, input_frame, i))
-                return -1;
+            try {
+                transcode_video(input_packet, input_frame, i);
+            }
+            catch (ScreenRecorderException e) {
+                throw e;
+            }
             av_packet_unref(input_packet);
-
         }
         else {
-            cout << "ignoring all non video or audio packets" << endl;
+            cout << "Ignoring all non video or audio packets" << endl;
         }
 
         i++;
@@ -360,7 +358,7 @@ int ScreenRecorder::capture_video() {
     return 0;
 }
 
-int ScreenRecorder::capture_audio() {
+int ScreenRecorder::capture_audio() throw() {
     int numFrames = 100;
     audioConverter = swr_alloc_set_opts(nullptr,
         av_get_default_channel_layout(audio_decoder->avcc->channels),
@@ -378,20 +376,17 @@ int ScreenRecorder::capture_audio() {
 
     AVFrame* input_frame = av_frame_alloc();
     if (!input_frame) {
-        cout << "failed to allocated memory for AVFrame" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for AVFrame");
     }
 
     AVPacket* input_packet = av_packet_alloc();
     if (!input_packet) {
-        cout << "failed to allocated memory for AVPacket" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for AVPacket");
     }
 
     AVPacket* outputPacket = av_packet_alloc();
     if (!outputPacket) {
-        cout << "failed to allocated memory for AVPacket" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for AVPacket");
     }
 
     int i = 0;
@@ -403,17 +398,26 @@ int ScreenRecorder::capture_audio() {
             avformat_close_input(&audio_decoder->avfc);
 
             cv.wait(ul, [this]() {return !isPause || !isRunning;});
+
+            AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
+
+            if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
+                throw ScreenRecorderException("Failed to open audio input file");
+            }
         }
         ul.unlock();
         if (av_read_frame(audio_decoder->avfc, input_packet) < 0) {
-            cout << "Error reading audio frame" << endl;
-            return -1;
+            throw ScreenRecorderException("Error reading audio frame");
         }
 
         if (audio_decoder->avfc->streams[input_packet->stream_index]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
 
-            if (transcode_audio(input_packet, input_frame))
-                return -1;
+            try {
+                transcode_audio(input_packet, input_frame);
+            }
+            catch (ScreenRecorderException e) {
+                throw e;
+            }
 
             int ret;
 
@@ -427,18 +431,18 @@ int ScreenRecorder::capture_audio() {
 
                 ret = av_frame_get_buffer(outputFrame, 0);
                 if (ret < 0) {
-                    cout << "errore" << endl;
+                    throw ScreenRecorderException("Error while allocating audio buffer");
                 }
                 ret = av_audio_fifo_read(audioFifo, (void**)outputFrame->data, audio_encoder->avcc->frame_size);
                 if (ret < 0) {
-                    cout << "errore" << endl;
+                    throw ScreenRecorderException("Error reading from audioFifo");
                 }
 
                 outputFrame->pts = i * 1024;
 
                 ret = avcodec_send_frame(audio_encoder->avcc, outputFrame);
                 if (ret < 0) {
-                    cout << "Fail to send frame in encoding" << endl;
+                    throw ScreenRecorderException("Failed to send frame in encoding");
                 }
                 av_frame_free(&outputFrame);
                 ret = avcodec_receive_packet(audio_encoder->avcc, outputPacket);
@@ -446,7 +450,7 @@ int ScreenRecorder::capture_audio() {
                     continue;
                 }
                 else if (ret < 0) {
-                    cout << "Fail to receive packet in encoding" << endl;
+                    throw ScreenRecorderException("Failed to receive packet in encoding");
                 }
 
 
@@ -462,7 +466,7 @@ int ScreenRecorder::capture_audio() {
             }
         }
         else {
-            cout << "ignoring all non video or audio packets" << endl;
+            cout << "Ignoring all non video or audio packets" << endl;
         }
 
 
@@ -481,42 +485,36 @@ int ScreenRecorder::capture_audio() {
     return 0;
 }
 
-int ScreenRecorder::transcode_audio(AVPacket* input_packet, AVFrame* input_frame) {
+int ScreenRecorder::transcode_audio(AVPacket* input_packet, AVFrame* input_frame) throw() {
 
     uint8_t** cSamples = nullptr;
 
     int response = avcodec_send_packet(audio_decoder->avcc, input_packet);
     if (response < 0) {
-        cout << "Error while sending packet to audio_decoder" << endl;
-        return response;
+        throw ScreenRecorderException("Error while sending packet to audio_decoder");
     }
 
     response = avcodec_receive_frame(audio_decoder->avcc, input_frame);
     if (response < 0) {
-        cout << "Error while receiving frame from audio_decoder" << endl;
-        return response;
+        throw ScreenRecorderException("Error while receiving frame from audio_decoder");
     }
 
     response = av_samples_alloc_array_and_samples(&cSamples, NULL, audio_encoder->avcc->channels, input_frame->nb_samples, AV_SAMPLE_FMT_FLTP, 0);
     if (response < 0) {
-        cout << "Fail to alloc samples by av_samples_alloc_array_and_samples." << endl;
-        return response;
+        throw ScreenRecorderException("Failed to alloc samples by av_samples_alloc_array_and_samples");
     }
 
     response = swr_convert(audioConverter, cSamples, input_frame->nb_samples, (const uint8_t**)input_frame->extended_data, input_frame->nb_samples);
     if (response < 0) {
-        cout << "Fail to swr_convert." << endl;
-        return response;
+        throw ScreenRecorderException("Failed to convert with swr_convert");
     }
     if (av_audio_fifo_space(audioFifo) < input_frame->nb_samples) {
-        cout << "audio buffer is too small." << endl;
-        return response;
+        throw ScreenRecorderException("Audio buffer is too small");
     }
 
     response = av_audio_fifo_write(audioFifo, (void**)cSamples, input_frame->nb_samples);
     if (response < 0) {
-        cout << "Fail to write fifo" << endl;
-        return response;
+        throw ScreenRecorderException("Failed to write audioFifo");
     }
 
     av_freep(&cSamples[0]);
@@ -527,7 +525,7 @@ int ScreenRecorder::transcode_audio(AVPacket* input_packet, AVFrame* input_frame
     return 0;
 }
 
-int ScreenRecorder::open_video_media() {
+int ScreenRecorder::open_video_media() throw() {
 
 
     video_decoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
@@ -544,8 +542,7 @@ int ScreenRecorder::open_video_media() {
     video_decoder->avfc = avformat_alloc_context();
 
     if (!video_decoder->avfc) {
-        cout << "failed to alloc memory for format" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to alloc memory for video input format");
     }
 
     AVInputFormat* pAVInputFormat = av_find_input_format(video_input_format);
@@ -556,30 +553,25 @@ int ScreenRecorder::open_video_media() {
 
     int value = av_dict_set(&options, "video_size", resolution.c_str(), 0);
     if (value < 0) {
-        cout << "no option" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to video size option");
     }
 
     value = av_dict_set(&options, "offset_x", to_string(offset_x).c_str(), 0);
     if (value < 0) {
-        cout << "no option" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to set video offset_x option");
     }
 
     value = av_dict_set(&options, "offset_y", to_string(offset_y).c_str(), 0);
     if (value < 0) {
-        cout << "no option" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to set video offset_y option");
     }
 
     if (avformat_open_input(&video_decoder->avfc, video_decoder->filename, pAVInputFormat, &options) != 0) {
-        cout << "failed to open input file " << video_decoder->filename << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to open video input file");
     }
 
     if (avformat_find_stream_info(video_decoder->avfc, NULL) < 0) {
-        cout << "failed to get stream info" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to get video stream info");
     }
 
     return 0;
@@ -595,7 +587,7 @@ static std::string unicode2utf8(const WCHAR* uni) {
 #endif
 
 
-int ScreenRecorder::open_audio_media() {
+int ScreenRecorder::open_audio_media() throw() {
 
     audio_decoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
     audio_decoder->filename = (char*)malloc(50 * sizeof(char));
@@ -616,7 +608,7 @@ int ScreenRecorder::open_audio_media() {
     hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
     if (FAILED(hr))
     {
-        return -1;
+        throw ScreenRecorderException("Error while retrieving audio input device names");
     }
 
     ICreateDevEnum* pSysDevEnum = NULL;
@@ -624,7 +616,7 @@ int ScreenRecorder::open_audio_media() {
     if (FAILED(hr))
     {
         CoUninitialize();
-        return -1;
+        throw ScreenRecorderException("Error while retrieving audio input device names");
     }
 
     IEnumMoniker* pEnumCat = NULL;
@@ -673,9 +665,8 @@ int ScreenRecorder::open_audio_media() {
 
     audio_decoder->avfc = avformat_alloc_context();
 
-    if (!audio_decoder->avfc) {
-        cout << "failed to alloc memory for format" << endl;
-        return -1;
+    if (!audio_decoder->avfc) { 
+        throw ScreenRecorderException("Failed to alloc memory for audio input format");
     }
 
     AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
@@ -683,20 +674,18 @@ int ScreenRecorder::open_audio_media() {
     AVDictionary* options = NULL;
 
     if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, &options) != 0) {
-        cout << "failed to open input file " << audio_decoder->filename << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to open audio input file");
     }
 
     if (avformat_find_stream_info(audio_decoder->avfc, NULL) < 0) {
-        cout << "failed to get stream info" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to get audio input stream info");
     }
 
     return 0;
 }
 
 
-int ScreenRecorder::prepare_video_decoder() {
+int ScreenRecorder::prepare_video_decoder() throw() {
     for (int i = 0; i < video_decoder->avfc->nb_streams; i++) {
         if (video_decoder->avfc->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
             video_decoder->avs = video_decoder->avfc->streams[i];
@@ -704,36 +693,32 @@ int ScreenRecorder::prepare_video_decoder() {
 
             video_decoder->avc = avcodec_find_decoder(video_decoder->avs->codecpar->codec_id);
             if (!video_decoder->avc) {
-                cout << "failed to find the codec" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to find video codec");
             }
 
             video_decoder->avcc = avcodec_alloc_context3(video_decoder->avc);
             if (!video_decoder->avcc) {
-                cout << "failed to alloc memory for codec context" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to alloc memory for video input codec context");
             }
 
 
             if (avcodec_parameters_to_context(video_decoder->avcc, video_decoder->avs->codecpar) < 0) {
-                cout << "failed to fill codec context" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to fill video input codec context");
             }
 
             if (avcodec_open2(video_decoder->avcc, video_decoder->avc, NULL) < 0) {
-                cout << "failed to open codec" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to open video input codec");
             }
         }
         else {
-            cout << "skipping streams other than audio and video" << endl;
+            cout << "Skipping streams other than audio and video" << endl;
         }
     }
 
     return 0;
 }
 
-int ScreenRecorder::prepare_audio_decoder() {
+int ScreenRecorder::prepare_audio_decoder() throw() {
     for (int i = 0; i < audio_decoder->avfc->nb_streams; i++) {
         if (audio_decoder->avfc->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             audio_decoder->avs = audio_decoder->avfc->streams[i];
@@ -741,48 +726,42 @@ int ScreenRecorder::prepare_audio_decoder() {
 
             audio_decoder->avc = avcodec_find_decoder(audio_decoder->avs->codecpar->codec_id);
             if (!audio_decoder->avc) {
-                cout << "failed to find the codec" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to find audio codec");
             }
 
             audio_decoder->avcc = avcodec_alloc_context3(audio_decoder->avc);
             if (!audio_decoder->avcc) {
-                cout << "failed to alloc memory for codec context" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to alloc memory for audio input codec context");
             }
 
 
             if (avcodec_parameters_to_context(audio_decoder->avcc, audio_decoder->avs->codecpar) < 0) {
-                cout << "failed to fill codec context" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to fill audio input codec context");
             }
 
             if (avcodec_open2(audio_decoder->avcc, audio_decoder->avc, NULL) < 0) {
-                cout << "failed to open codec" << endl;
-                return -1;
+                throw ScreenRecorderException("Failed to open audio input codec");
             }
         }
         else {
-            cout << "skipping streams other than audio and audio" << endl;
+            cout << "Skipping streams other than audio and audio" << endl;
         }
     }
 
     return 0;
 }
 
-int ScreenRecorder::prepare_video_encoder() {
+int ScreenRecorder::prepare_video_encoder() throw() {
     video_encoder->avs = avformat_new_stream(out_avfc, NULL);
 
     video_encoder->avc = avcodec_find_encoder(AV_CODEC_ID_H264);
     if (!video_encoder->avc) {
-        cout << "could not find the proper codec" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to find video output codec");
     }
 
     video_encoder->avcc = avcodec_alloc_context3(video_encoder->avc);
     if (!video_encoder->avcc) {
-        cout << "could not allocated memory for codec context" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for video output codec context");
     }
 
     av_opt_set(video_encoder->avcc, "preset", "ultrafast", 0);
@@ -808,26 +787,23 @@ int ScreenRecorder::prepare_video_encoder() {
 
 
     if (avcodec_open2(video_encoder->avcc, video_encoder->avc, NULL) < 0) {
-        cout << "could not open the codec" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to open the video output codec");
     }
     avcodec_parameters_from_context(video_encoder->avs->codecpar, video_encoder->avcc);
     return 0;
 }
 
-int ScreenRecorder::prepare_audio_encoder() {
+int ScreenRecorder::prepare_audio_encoder() throw() {
     audio_encoder->avs = avformat_new_stream(out_avfc, NULL);
 
     audio_encoder->avc = avcodec_find_encoder(AV_CODEC_ID_AAC);
     if (!audio_encoder->avc) {
-        cout << "could not find the proper codec" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to find audio output codec");
     }
 
     audio_encoder->avcc = avcodec_alloc_context3(audio_encoder->avc);
     if (!audio_encoder->avcc) {
-        cout << "could not allocated memory for codec context" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for audio output codec context");
     }
 
     audio_encoder->avcc->channels = audio_decoder->avs->codecpar->channels;
@@ -843,21 +819,19 @@ int ScreenRecorder::prepare_audio_encoder() {
     audio_encoder->avs->time_base = audio_encoder->avcc->time_base;
 
     if (avcodec_open2(audio_encoder->avcc, audio_encoder->avc, NULL) < 0) {
-        cout << "could not open the codec" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to open audio output codec");
     }
     avcodec_parameters_from_context(audio_encoder->avs->codecpar, audio_encoder->avcc);
     return 0;
 }
 
-int ScreenRecorder::encode_video(AVFrame* input_frame, int i) {
+int ScreenRecorder::encode_video(AVFrame* input_frame, int i) throw() {
     if (input_frame)
         input_frame->pict_type = AV_PICTURE_TYPE_NONE;
 
     AVPacket* output_packet = av_packet_alloc();
     if (!output_packet) {
-        cout << "could not allocate memory for output packet" << endl;
-        return -1;
+        throw ScreenRecorderException("Failed to allocate memory for output packet");
     }
 
     int response = avcodec_send_frame(video_encoder->avcc, input_frame);
@@ -868,8 +842,7 @@ int ScreenRecorder::encode_video(AVFrame* input_frame, int i) {
             break;
         }
         else if (response < 0) {
-            cout << "Error while receiving packet from video_encoder" << endl;
-            return -1;
+            throw ScreenRecorderException("Error while receiving packet from video_encoder");
         }
 
         output_packet->stream_index = video_decoder->stream_index;
@@ -878,8 +851,7 @@ int ScreenRecorder::encode_video(AVFrame* input_frame, int i) {
 
         response = av_interleaved_write_frame(out_avfc, output_packet);
         if (response != 0) {
-            cout << "Error " << response << " while receiving packet from video_decoder" << endl;
-            return -1;
+            throw ScreenRecorderException("Error while receiving packet from video_decoder");
         }
     }
     av_packet_unref(output_packet);
@@ -887,11 +859,10 @@ int ScreenRecorder::encode_video(AVFrame* input_frame, int i) {
     return 0;
 }
 
-int ScreenRecorder::transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i) {
+int ScreenRecorder::transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i) throw() {
     int response = avcodec_send_packet(video_decoder->avcc, input_packet);
     if (response < 0) {
-        cout << "Error while sending packet to video_decoder" << endl;
-        return response;
+        throw ScreenRecorderException("Error while sending packet to video_decoder");
     }
 
     while (response >= 0) {
@@ -900,23 +871,21 @@ int ScreenRecorder::transcode_video(AVPacket* input_packet, AVFrame* input_frame
             break;
         }
         else if (response < 0) {
-            cout << "Error while receiving frame from video_decoder" << endl;
-            return response;
+            throw ScreenRecorderException("Error while receiving frame from video_decoder");
         }
 
         int nbytes = av_image_get_buffer_size(video_encoder->avcc->pix_fmt, video_encoder->avcc->width, video_encoder->avcc->height, 32);
         uint8_t* video_outbuf = (uint8_t*)av_malloc(nbytes);
         if (video_outbuf == NULL)
         {
-            cout << "\nunable to allocate memory";
-            exit(1);
+            throw ScreenRecorderException("Failed to allocate memory");
         }
 
         AVFrame* output_frame = av_frame_alloc();
         int value = av_image_fill_arrays(output_frame->data, output_frame->linesize, video_outbuf, AV_PIX_FMT_YUV420P, video_encoder->avcc->width, video_encoder->avcc->height, 1); // returns : the size in bytes required for src
         if (value < 0)
         {
-            cout << "error in filling image array" << endl;
+            throw ScreenRecorderException("Error in filling image array");
         }
         SwsContext* swsCtx_;
         swsCtx_ = sws_getContext(video_decoder->avcc->width, video_decoder->avcc->height, video_decoder->avcc->pix_fmt, video_encoder->avcc->width, video_encoder->avcc->height, video_encoder->avcc->pix_fmt, SWS_BICUBIC, NULL, NULL, NULL);
@@ -929,7 +898,12 @@ int ScreenRecorder::transcode_video(AVPacket* input_packet, AVFrame* input_frame
         output_frame->pts = input_frame->pts;
 
         if (response >= 0) {
-            if (encode_video(output_frame, i)) return -1;
+            try {
+                encode_video(output_frame, i);
+            }
+            catch (ScreenRecorderException e) {
+                throw e;
+            }
         }
         av_frame_unref(input_frame);
     }
