@@ -17,6 +17,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <exception>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -60,6 +61,18 @@ extern "C"
 #include "libswresample/swresample.h"
 
 }
+
+
+class ScreenRecorderException : std::exception {
+private:
+    const char* desc;
+public:
+    ScreenRecorderException(const char* description) : desc(description) {}
+    const char* what() const noexcept {
+        return desc;
+    }
+};
+
 
 typedef struct StreamingContext {
     AVFormatContext* avfc;
@@ -107,23 +120,23 @@ public:
     ScreenRecorder();
     ~ScreenRecorder();
 
-    int start();
+    int start() throw();
     int stop();
     int pause();
     int resume();
-    int capture();
-    int capture_video();
-    int capture_audio();
-    int transcode_audio(AVPacket* input_packet, AVFrame* input_frame);
-    int open_video_media();
-    int open_audio_media();
-    int prepare_video_decoder();
-    int prepare_audio_decoder();
-    int prepare_video_encoder();
-    int prepare_audio_encoder();
-    int encode_video(AVFrame* input_frame, int i);
-    int transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i);
-    void controller();
+    int capture() throw();
+    int capture_video() throw();
+    int capture_audio() throw();
+    int transcode_audio(AVPacket* input_packet, AVFrame* input_frame) throw();
+    int open_video_media() throw();
+    int open_audio_media() throw();
+    int prepare_video_decoder() throw();
+    int prepare_audio_decoder() throw();
+    int prepare_video_encoder() throw();
+    int prepare_audio_encoder() throw();
+    int encode_video(AVFrame* input_frame, int i) throw();
+    int transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i) throw();
+    void controller() throw();
 
 };
 
