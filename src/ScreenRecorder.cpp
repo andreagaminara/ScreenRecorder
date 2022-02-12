@@ -196,7 +196,7 @@ int ScreenRecorder::capture() throw() {
 
     cout << "Height: ";
     cin >> video_height;
-    video_height = (video_height/32)*32;
+    video_height = (video_height/2)*2;
 
     //Offset setting
     cout << "Insert the offset (position where you want your recorded area starts on the screen)" << endl;
@@ -548,13 +548,13 @@ int ScreenRecorder::transcode_audio(AVPacket* input_packet, AVFrame* input_frame
 
 int ScreenRecorder::open_video_media() throw() {
 
-
     video_decoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
     video_decoder->filename = (char*)malloc(50 * sizeof(char));
 #ifdef _WIN32
     strcpy(video_decoder->filename, "desktop");
 #elif __linux__
-    string str_filename = ":0.0+" + to_string(offset_x) + "," + to_string(offset_y);
+    char *display = getenv("DISPLAY");
+    string str_filename = string(display) + ".0+" + to_string(offset_x) + "," + to_string(offset_y);
     strcpy(video_decoder->filename, str_filename.c_str());
 #endif
 
@@ -587,6 +587,11 @@ int ScreenRecorder::open_video_media() throw() {
     value = av_dict_set(&options, "offset_y", to_string(offset_y).c_str(), 0);
     if (value < 0) {
         throw ScreenRecorderException("Failed to set video offset_y option");
+    }
+#elif __linux__
+    value = av_dict_set(&options, "show_region", "1", 0);
+    if (value < 0) {
+        throw ScreenRecorderException("Failed to set video show_region option");
     }
 #endif
 
