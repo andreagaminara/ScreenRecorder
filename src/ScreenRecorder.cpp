@@ -290,23 +290,33 @@ void ScreenRecorder::controller() throw() {
             else cout << "Video recording already started." << endl;
             break;
         case 1:
-            this->stop();
-            endRecording = true;
-            cout << "Video recording is terminated." << endl;
+            if (!isRunning){
+                cout << "Video recording hasn't started yet" << endl;
+            } else {
+                this->stop();
+                endRecording = true;
+                cout << "Video recording is terminated." << endl;
+            }
             break;
         case 2:
-            if (!isPause) {
-                this->pause();
-                cout << "Video recording is now paused." << endl;
+            if (!isRunning){
+                cout << "Video recording hasn't started yet" << endl;
+            } else {
+                if (!isPause) {
+                    this->pause();
+                    cout << "Video recording is now paused." << endl;
+                } else cout << "Video recording already paused." << endl;
             }
-            else cout << "Video recording already paused." << endl;
             break;
         case 3:
-            if (isPause) {
-                this->resume();
-                cout << "Video recording is now resumed.\n" << endl;
+            if (!isRunning){
+                cout << "Video recording hasn't started yet" << endl;
+            } else {
+                if (isPause) {
+                    this->resume();
+                    cout << "Video recording is now resumed.\n" << endl;
+                } else cout << "Video recording not paused." << endl;
             }
-            else cout << "Video recording not paused." << endl;
             break;
         default:
             cout << "Action not recognised." << endl;
