@@ -2,7 +2,7 @@
 // Created by andrea on 10/11/21.
 //
 
-#include "ScreenRecorder.h"
+#include "../include/ScreenRecorder.h"
 
 using namespace std;
 
@@ -13,6 +13,13 @@ ScreenRecorder::ScreenRecorder()
 #ifdef _WIN32
     screen_width = (int)GetSystemMetrics(SM_CXSCREEN);
     screen_height = (int)GetSystemMetrics(SM_CYSCREEN);
+    /*HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info;
+    info.cbSize = sizeof(MONITORINFO);
+    GetMonitorInfo(monitor, &info);
+    int monitor_width = info.rcMonitor.right - info.rcMonitor.left;
+    int monitor_height = info.rcMonitor.bottom - info.rcMonitor.top
+     */
 #elif __linux__
     Display* disp = XOpenDisplay(NULL);
     Screen* scrn = DefaultScreenOfDisplay(disp);
@@ -156,17 +163,16 @@ int ScreenRecorder::pause() {
 
 }
 
-int ScreenRecorder::resume() {
+int ScreenRecorder::resume() throw() {
     unique_lock<mutex> ul(m);
-    /*if (isAudio) {
+    if (isAudio) {
         AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
 
         if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
-            cout << "failed to open input file " << audio_decoder->filename << endl;
-            return -1;
+            throw ScreenRecorderException("Failed to open audio input file");
         }
 
-    }*/
+    }
     isPause.exchange(false);
     cv.notify_all();
 
@@ -186,9 +192,11 @@ int ScreenRecorder::capture() throw() {
 
     cout << "Width: ";
     cin >> video_width;
+    video_width = (video_width/32)*32;
 
     cout << "Height: ";
     cin >> video_height;
+    video_height = (video_height/32)*32;
 
     //Offset setting
     cout << "Insert the offset (position where you want your recorded area starts on the screen)" << endl;
@@ -199,12 +207,15 @@ int ScreenRecorder::capture() throw() {
     cout << "Vertical offset: ";
     cin >> offset_y;
 
+    if (video_width+offset_x > screen_width || video_height + offset_y > screen_height)
+        throw ScreenRecorderException("Invalid dimensions for the capture area");
+
     //Output filename setting
     cout << "Insert the name of the output file" << endl;
 
-    cout << "Filename: ";
+    cout << "Filename (without extension): ";
     cin >> output_filename;
-
+    strcat(output_filename, ".mp4");
 
     //Audio option setting
     string answer;
@@ -264,7 +275,7 @@ void ScreenRecorder::controller() throw() {
         cout << "Choose one action:\n0 = start.\n1 = stop.\n2 = pause.\n3 = resume." << endl;
         cin >> action;
         std::cin.clear();
-        //std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
         switch (action) {
         case 0:
             if(!isRunning){
@@ -399,11 +410,11 @@ int ScreenRecorder::capture_audio() throw() {
 
             cv.wait(ul, [this]() {return !isPause || !isRunning;});
 
-            AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
+            /*AVInputFormat* pAVInputFormat = av_find_input_format(audio_input_format);
 
             if (avformat_open_input(&audio_decoder->avfc, audio_decoder->filename, pAVInputFormat, NULL) != 0) {
                 throw ScreenRecorderException("Failed to open audio input file");
-            }
+            }*/
         }
         ul.unlock();
         if (av_read_frame(audio_decoder->avfc, input_packet) < 0) {
@@ -533,7 +544,8 @@ int ScreenRecorder::open_video_media() throw() {
 #ifdef _WIN32
     strcpy(video_decoder->filename, "desktop");
 #elif __linux__
-    strcpy(video_decoder->filename, ":0.0+0,0");
+    string str_filename = ":0.0+" + to_string(offset_x) + "," + to_string(offset_y);
+    strcpy(video_decoder->filename, str_filename.c_str());
 #endif
 
 
@@ -556,6 +568,7 @@ int ScreenRecorder::open_video_media() throw() {
         throw ScreenRecorderException("Failed to video size option");
     }
 
+#ifdef _WIN32
     value = av_dict_set(&options, "offset_x", to_string(offset_x).c_str(), 0);
     if (value < 0) {
         throw ScreenRecorderException("Failed to set video offset_x option");
@@ -565,6 +578,7 @@ int ScreenRecorder::open_video_media() throw() {
     if (value < 0) {
         throw ScreenRecorderException("Failed to set video offset_y option");
     }
+#endif
 
     if (avformat_open_input(&video_decoder->avfc, video_decoder->filename, pAVInputFormat, &options) != 0) {
         throw ScreenRecorderException("Failed to open video input file");

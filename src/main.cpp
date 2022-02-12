@@ -1,5 +1,5 @@
 #include <iostream>
-#include "../ScreenRecorder.h"
+#include "../include/ScreenRecorder.h"
 using namespace std;
 
 /* driver function to run the application */

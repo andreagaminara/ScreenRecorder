@@ -20,8 +20,11 @@
 #include <exception>
 
 #ifdef _WIN32
+#define NOMINMAX
 #include <windows.h>
 #include <dshow.h>
+#elif __linux__
+#include <X11/Xlib.h>
 #endif
 
 #define __STDC_CONSTANT_MACROS
@@ -123,7 +126,7 @@ public:
     int start() throw();
     int stop();
     int pause();
-    int resume();
+    int resume() throw();
     int capture() throw();
     int capture_video() throw();
     int capture_audio() throw();
