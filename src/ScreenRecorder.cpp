@@ -11,8 +11,8 @@ ScreenRecorder::ScreenRecorder()
     avdevice_register_all();
 
 #ifdef _WIN32
-    screen_width = (int)GetSystemMetrics(SM_CXSCREEN);
-    screen_height = (int)GetSystemMetrics(SM_CYSCREEN);
+    screen_width = (int)GetSystemMetrics(SM_CXSCREEN) * 5 / 4;
+    screen_height = (int)GetSystemMetrics(SM_CYSCREEN) * 5 / 4;
     /*HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info;
     info.cbSize = sizeof(MONITORINFO);
@@ -327,7 +327,6 @@ void ScreenRecorder::controller() throw() {
 
 int ScreenRecorder::capture_video() throw() {
 
-    int numFrames = 100;
     AVFrame* input_frame = av_frame_alloc();
     if (!input_frame) {
         throw ScreenRecorderException("Failed to allocate memory for AVFrame");
@@ -380,7 +379,7 @@ int ScreenRecorder::capture_video() throw() {
 }
 
 int ScreenRecorder::capture_audio() throw() {
-    int numFrames = 100;
+
     audioConverter = swr_alloc_set_opts(nullptr,
         av_get_default_channel_layout(audio_decoder->avcc->channels),
         AV_SAMPLE_FMT_FLTP,
