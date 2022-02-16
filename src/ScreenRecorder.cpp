@@ -577,6 +577,12 @@ int ScreenRecorder::open_video_media() throw() {
     if (value < 0) {
         throw ScreenRecorderException("Failed to video size option");
     }
+    
+     value = av_dict_set(&options, "framerate", "15", 0);
+    if (value < 0) {
+
+        throw ScreenRecorderException("Error in setting dictionary value (setting framerate)");
+    }
 
 #ifdef _WIN32
     value = av_dict_set(&options, "offset_x", to_string(offset_x).c_str(), 0);
@@ -794,6 +800,15 @@ int ScreenRecorder::prepare_video_encoder() throw() {
     }
 
     av_opt_set(video_encoder->avcc, "preset", "ultrafast", 0);
+    av_opt_set(video_encoder->avcc, "cabac", "1", 0);
+    av_opt_set(video_encoder->avcc, "ref", "3", 0);
+    av_opt_set(video_encoder->avcc, "deblock", "1:0:0", 0);
+    av_opt_set(video_encoder->avcc, "analyse", "0x3:0x113", 0);
+    av_opt_set(video_encoder->avcc, "subme", "7", 0);
+    av_opt_set(video_encoder->avcc, "chroma_qp_offset", "4", 0);
+    av_opt_set(video_encoder->avcc, "rc", "crf", 0);
+    av_opt_set(video_encoder->avcc, "rc_lookahead", "40", 0);
+    av_opt_set(video_encoder->avcc, "crf", "10.0", 0);
 
     video_encoder->avcc->height = video_decoder->avcc->height;
     video_encoder->avcc->width = video_decoder->avcc->width;
