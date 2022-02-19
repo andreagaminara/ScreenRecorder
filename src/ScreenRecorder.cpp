@@ -11,15 +11,8 @@ ScreenRecorder::ScreenRecorder()
     avdevice_register_all();
 
 #ifdef _WIN32
-    screen_width = (int)GetSystemMetrics(SM_CXSCREEN) * 5 / 4;
-    screen_height = (int)GetSystemMetrics(SM_CYSCREEN) * 5 / 4;
-    /*HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO info;
-    info.cbSize = sizeof(MONITORINFO);
-    GetMonitorInfo(monitor, &info);
-    int monitor_width = info.rcMonitor.right - info.rcMonitor.left;
-    int monitor_height = info.rcMonitor.bottom - info.rcMonitor.top
-     */
+    screen_width = (int)GetSystemMetrics(SM_CXSCREEN);
+    screen_height = (int)GetSystemMetrics(SM_CYSCREEN);
 #elif __linux__
     Display* disp = XOpenDisplay(NULL);
     Screen* scrn = DefaultScreenOfDisplay(disp);
@@ -799,6 +792,7 @@ int ScreenRecorder::prepare_video_encoder() throw() {
     }
 
     av_opt_set(video_encoder->avcc, "preset", "ultrafast", 0);
+#ifdef _WIN32
     av_opt_set(video_encoder->avcc, "cabac", "1", 0);
     av_opt_set(video_encoder->avcc, "ref", "3", 0);
     av_opt_set(video_encoder->avcc, "deblock", "1:0:0", 0);
@@ -808,6 +802,7 @@ int ScreenRecorder::prepare_video_encoder() throw() {
     av_opt_set(video_encoder->avcc, "rc", "crf", 0);
     av_opt_set(video_encoder->avcc, "rc_lookahead", "40", 0);
     av_opt_set(video_encoder->avcc, "crf", "10.0", 0);
+#endif
 
     video_encoder->avcc->height = video_decoder->avcc->height;
     video_encoder->avcc->width = video_decoder->avcc->width;
