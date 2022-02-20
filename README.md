@@ -1,7 +1,7 @@
 # ScreenRecorder
 Screen recorder application built using FFmpeg 4.1 library.
 
-### Dependencies
+## Dependencies
 List of libraries needed on your system to run the application:
 - libavcodec
 - libavformat
@@ -12,7 +12,7 @@ List of libraries needed on your system to run the application:
 - libswresample
 - libx11
 
-### Documentation
+## Documentation
 The class ScreenRecorder is used as an API to call the functions of the FFmpeg library. The methods of the class ScreenRecorder are the following:
 - int capture() throw();
 
