@@ -17,7 +17,9 @@ The class ScreenRecorder is used as an API to call the functions of the FFmpeg l
 - int capture() throw();
 - void controller() throw();
 - int start() throw();
-  Start the recording of video and eventually audio packets.
+
+    Start the recording of video and eventually audio packets.
+  
 - int stop();
 - int pause();
 - int resume() throw();
