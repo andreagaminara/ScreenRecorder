@@ -77,6 +77,10 @@ ScreenRecorder::~ScreenRecorder() {
     video_encoder = NULL;
 }
 
+/**
+* Starts the recording of video and eventually audio packets.
+*/
+
 int ScreenRecorder::start() throw() {
 
     isRunning = true;
@@ -140,7 +144,9 @@ int ScreenRecorder::start() throw() {
 
     return 0;
 }
-
+/**
+* Terminates the recording.
+*/
 int ScreenRecorder::stop() {
     unique_lock<mutex> ul(m);
     isRunning.exchange(false);
@@ -148,6 +154,9 @@ int ScreenRecorder::stop() {
 
     return 0;
 }
+/**
+* Stops temporarily the recording (it can be resumed later).
+*/
 
 int ScreenRecorder::pause() {
 
@@ -155,7 +164,9 @@ int ScreenRecorder::pause() {
     return 0;
 
 }
-
+/**
+* Resumes a recording that was previously paused.
+*/
 int ScreenRecorder::resume() throw() {
     unique_lock<mutex> ul(m);
     if (isAudio) {
@@ -173,6 +184,9 @@ int ScreenRecorder::resume() throw() {
 
 }
 
+/**
+* Asks to the user to set some recording configuration parameters and calls the methods to initialize all the structure needed to perform the recording.
+*/
 
 int ScreenRecorder::capture() throw() {
 
@@ -260,6 +274,9 @@ int ScreenRecorder::capture() throw() {
     return 0;
 
 }
+/**
+* Shows the menu to the user and calls the method to execute the action chosen by the user.
+*/
 
 void ScreenRecorder::controller() throw() {
     int action;
@@ -317,7 +334,9 @@ void ScreenRecorder::controller() throw() {
         }
     }
 }
-
+/**
+* aptures video frames.
+*/
 int ScreenRecorder::capture_video() throw() {
 
     AVFrame* input_frame = av_frame_alloc();
@@ -370,7 +389,9 @@ int ScreenRecorder::capture_video() throw() {
 
     return 0;
 }
-
+/**
+* Captures audio frames.
+*/
 int ScreenRecorder::capture_audio() throw() {
 
     audioConverter = swr_alloc_set_opts(nullptr,
@@ -497,7 +518,9 @@ int ScreenRecorder::capture_audio() throw() {
 
     return 0;
 }
-
+/**
+* Decodes input packets and encodes them in output packets.
+*/
 int ScreenRecorder::transcode_audio(AVPacket* input_packet, AVFrame* input_frame) throw() {
 
     uint8_t** cSamples = nullptr;
@@ -537,7 +560,9 @@ int ScreenRecorder::transcode_audio(AVPacket* input_packet, AVFrame* input_frame
 
     return 0;
 }
-
+/**
+* Opens video input device.
+*/
 int ScreenRecorder::open_video_media() throw() {
 
     video_decoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
@@ -613,7 +638,9 @@ static std::string unicode2utf8(const WCHAR* uni) {
 }
 #endif
 
-
+/**
+* Opens audio input device.
+*/
 int ScreenRecorder::open_audio_media() throw() {
 
     audio_decoder = (StreamingContext*)calloc(1, sizeof(StreamingContext));
@@ -711,7 +738,9 @@ int ScreenRecorder::open_audio_media() throw() {
     return 0;
 }
 
-
+/**
+* Creates and initializes the structure used to decode video input packet.
+*/
 int ScreenRecorder::prepare_video_decoder() throw() {
     for (int i = 0; i < video_decoder->avfc->nb_streams; i++) {
         if (video_decoder->avfc->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
@@ -744,7 +773,9 @@ int ScreenRecorder::prepare_video_decoder() throw() {
 
     return 0;
 }
-
+/**
+* Creates and initializes the structure used to decode audio input packet.
+*/
 int ScreenRecorder::prepare_audio_decoder() throw() {
     for (int i = 0; i < audio_decoder->avfc->nb_streams; i++) {
         if (audio_decoder->avfc->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
@@ -777,7 +808,9 @@ int ScreenRecorder::prepare_audio_decoder() throw() {
 
     return 0;
 }
-
+/**
+* Creates and initializes the structure used to encode video input packet.
+*/
 int ScreenRecorder::prepare_video_encoder() throw() {
     video_encoder->avs = avformat_new_stream(out_avfc, NULL);
 
@@ -830,7 +863,9 @@ int ScreenRecorder::prepare_video_encoder() throw() {
     avcodec_parameters_from_context(video_encoder->avs->codecpar, video_encoder->avcc);
     return 0;
 }
-
+/**
+* Creates and initializes the structure used to encode audio input packet.
+*/
 int ScreenRecorder::prepare_audio_encoder() throw() {
     audio_encoder->avs = avformat_new_stream(out_avfc, NULL);
 
@@ -862,7 +897,9 @@ int ScreenRecorder::prepare_audio_encoder() throw() {
     avcodec_parameters_from_context(audio_encoder->avs->codecpar, audio_encoder->avcc);
     return 0;
 }
-
+/**
+* Encodes input frames into output packets.
+*/
 int ScreenRecorder::encode_video(AVFrame* input_frame, int i) throw() {
     if (input_frame)
         input_frame->pict_type = AV_PICTURE_TYPE_NONE;
@@ -896,7 +933,9 @@ int ScreenRecorder::encode_video(AVFrame* input_frame, int i) throw() {
     av_packet_free(&output_packet);
     return 0;
 }
-
+/**
+* Decodes input packets and calls the method to encode them in output packets.
+*/
 int ScreenRecorder::transcode_video(AVPacket* input_packet, AVFrame* input_frame, int i) throw() {
     int response = avcodec_send_packet(video_decoder->avcc, input_packet);
     if (response < 0) {
