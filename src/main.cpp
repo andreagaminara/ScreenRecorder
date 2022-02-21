@@ -1,5 +1,11 @@
 #include <iostream>
-#include "../include/ScreenRecorder.h"
+
+#ifdef _WIN32
+    #include "../ScreenRecorder.h"
+#elif __linux__
+    #include "../include/ScreenRecorder.h"
+#endif
+
 using namespace std;
 
 /* driver function to run the application */
